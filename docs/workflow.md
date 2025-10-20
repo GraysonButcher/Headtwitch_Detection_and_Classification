@@ -4,6 +4,22 @@
 
 This document describes the complete workflow for HTR (Head-Twitch Response) analysis, including all decision points and iterative refinement cycles.
 
+## Data Requirements
+
+Before starting, ensure your data meets these requirements:
+
+- **Pose tracking format:** SLEAP H5 files (`.h5` format)
+  - *Future support planned for DeepLabCut and other formats*
+- **Camera angle:** Top-down view of the animal
+- **Required bodypart labels (5 keypoints):**
+  - Left Ear
+  - Right Ear
+  - Head (center)
+  - Nose (snout tip)
+  - Back (base of neck/shoulders)
+
+The detection algorithms analyze ear and head movement patterns from these tracked points.
+
 ---
 
 ## Interactive Workflow Diagram

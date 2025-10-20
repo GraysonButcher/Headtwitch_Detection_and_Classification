@@ -20,9 +20,28 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
 
 ### Prerequisites
 
+**Software:**
 - Python 3.9 or higher
-- SLEAP-generated H5 pose tracking files
 - Windows 10/11, macOS 10.14+, or Linux
+
+**Data Requirements:**
+- **Pose tracking data:** SLEAP-generated H5 files (`.h5` format)
+  - *Note: Support for other pose estimation formats (DeepLabCut, etc.) planned for future releases*
+- **Camera view:** Top-down view of the animal required
+- **Bodypart labels:** Videos must be tracked with these 5 specific keypoints:
+  - **Left Ear**
+  - **Right Ear**
+  - **Head** (center of head)
+  - **Nose** (snout tip)
+  - **Back** (base of neck/shoulders)
+
+<p align="center">
+  <img src="docs/images/rat_labels_overhead_ex2.png" alt="Required Bodypart Labels" width="400">
+  <br>
+  <em>Required bodypart label placement (overhead view)</em>
+</p>
+
+*The tool uses ear and head movement patterns to detect HTR events*
 
 ### Quick Install
 
@@ -179,6 +198,14 @@ Batch processing for production analysis.
 
 ## How HTR Detection Works
 
+**Required Setup:** The detection algorithms require SLEAP H5 tracking data with 5 specific bodyparts (Left Ear, Right Ear, Head, Nose, Back) filmed from a top-down camera angle.
+
+<p align="center">
+  <img src="docs/screenshots/combined_detection_graphic.png" alt="HTR Detection Methods" width="700">
+  <br>
+  <em>Dual detection methods: Ear oscillations (top) and head oscillations (bottom) with detected events highlighted</em>
+</p>
+
 The tool uses **two complementary detection methods**:
 
 ### **1. Ear Detector**
@@ -204,10 +231,12 @@ Events are then classified using a trained XGBoost model that learns from user-l
 
 | Guide | Status | Description |
 |-------|--------|-------------|
-| **[Installation Guide](docs/installation.md)** | 🚧 Coming Soon | Detailed setup, conda/pip, troubleshooting |
+| **[Setup Guide](docs/setup_guide.md)** | ✅ Available | Hardware setup, camera configuration, SLEAP tracking |
+| **[How H-DaC Works](docs/detection_methods.md)** | ✅ Available | Detailed explanation of dual detection methods |
+| **[Workflow Guide](docs/workflow.md)** | ✅ Available | Complete end-to-end workflow with decision points |
+| **[Installation Guide](docs/installation.md)** | 🚧 Coming Soon | Detailed software installation, conda/pip, troubleshooting |
 | **[Quick Start Tutorial](docs/quickstart.md)** | 🚧 Coming Soon | 5-minute first-run walkthrough |
 | **[Parameter Tuning Guide](docs/parameter_tuning_guide.md)** | 🚧 Coming Soon | Understanding and adjusting detection parameters |
-| **[Workflow Guide](docs/workflow.md)** | ✅ Available | Complete end-to-end workflow with decision points |
 | **[FAQ & Troubleshooting](docs/faq.md)** | 🚧 Coming Soon | Common questions and issues |
 
 📹 **Video Tutorials** - Coming soon!
