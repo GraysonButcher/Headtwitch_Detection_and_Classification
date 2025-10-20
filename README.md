@@ -71,6 +71,23 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
 
 ## Workflow Overview
 
+```mermaid
+flowchart LR
+    A[1. Tune Parameters] --> B[2. Prepare Data]
+    B --> C[3. Train Model]
+    C --> D{Model OK?}
+    D -->|No| B
+    D -->|Yes| E[4. Deploy]
+
+    style A fill:#e3f2fd
+    style B fill:#f3e5f5
+    style C fill:#fff3e0
+    style D fill:#ffebee
+    style E fill:#e8f5e9
+```
+
+👉 **[View detailed workflow with decision points →](docs/workflow.md)**
+
 The application provides a structured 5-tab workflow for HTR detection and analysis:
 
 ### **Tab 1: Welcome**
@@ -190,7 +207,7 @@ Events are then classified using a trained XGBoost model that learns from user-l
 | **[Installation Guide](docs/installation.md)** | 🚧 Coming Soon | Detailed setup, conda/pip, troubleshooting |
 | **[Quick Start Tutorial](docs/quickstart.md)** | 🚧 Coming Soon | 5-minute first-run walkthrough |
 | **[Parameter Tuning Guide](docs/parameter_tuning_guide.md)** | 🚧 Coming Soon | Understanding and adjusting detection parameters |
-| **[Workflow Guide](docs/workflow.md)** | 🚧 Coming Soon | Complete end-to-end workflow examples |
+| **[Workflow Guide](docs/workflow.md)** | ✅ Available | Complete end-to-end workflow with decision points |
 | **[FAQ & Troubleshooting](docs/faq.md)** | 🚧 Coming Soon | Common questions and issues |
 
 📹 **Video Tutorials** - Coming soon!
