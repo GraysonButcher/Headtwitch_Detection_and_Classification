@@ -1,0 +1,37 @@
+{
+  "ear_detector": {
+    "peak_threshold": 30,
+    "valley_threshold": 30,
+    "max_gap": 2,
+    "quick_gap": 5,
+    "min_crisscrosses": 4,
+    "between_unit_gap": 15,
+    "merge_gap": 10,
+    "apply_median_score_filter": true,
+    "median_score_threshold": 0.6
+  },
+  "head_detector": {
+    "interpolation_method": "linear",
+    "min_oscillations": 3,
+    "amplitude_threshold": 10,
+    "amplitude_median": 15,
+    "median_score_threshold": 0.6,
+    "peak_prominence": 2,
+    "peak_distance": 3,
+    "use_smoothing": true,
+    "smoothing_window": 5,
+    "smoothing_polyorder": 2,
+    "min_cycle_duration": 2,
+    "max_cycle_duration": 5,
+    "max_cycle_gap": 8
+  },
+  "node_mapping": {
+    "left_ear": 0,
+    "right_ear": 1,
+    "back": 2,
+    "nose": 3,
+    "head": 4
+  },
+  "default_fps": 160,
+  "iou_threshold": 0.1
+}

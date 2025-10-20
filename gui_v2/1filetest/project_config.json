@@ -1,0 +1,34 @@
+{
+  "project_name": "1filetest",
+  "created_date": "2025-09-18T13:46:31.839488",
+  "last_modified": "2025-09-19T10:51:03.011398",
+  "workflow_type": "batch",
+  "version": "2.0",
+  "paths": {
+    "input": "./input",
+    "features": "./features",
+    "predictions": "./predictions",
+    "reports": "./reports",
+    "models": "./models",
+    "parameters": "./parameters"
+  },
+  "settings": {
+    "current_parameters": null,
+    "current_model": null,
+    "default_fps": 120
+  },
+  "workflow_status": {
+    "parameters_tuned": false,
+    "model_trained": false,
+    "features_extracted": true,
+    "predictions_made": true,
+    "report_generated": false
+  },
+  "file_counts": {
+    "h5_files": 1,
+    "video_files": 0,
+    "feature_files": 0,
+    "prediction_files": 0,
+    "model_files": 1
+  }
+}
