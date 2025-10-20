@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/logo.png" alt="H-DaC Logo" width="300">
+</p>
+
 # Head-Twitch Response Detection & Classification Tool
 
 A comprehensive desktop application for detecting and analyzing Head-Twitch Responses (HTRs) in rodent behavioral videos using SLEAP pose-tracking data and machine learning. This tool provides a structured 5-tab workflow from parameter tuning to model deployment.
