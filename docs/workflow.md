@@ -22,56 +22,19 @@ The detection algorithms analyze ear and head movement patterns from these track
 
 ---
 
-## Interactive Workflow Diagram
+## Workflow Diagram
 
-```mermaid
-flowchart TD
-    Start([New HTR Project]) --> HasParams{Have Good<br/>Parameters?}
+<p align="center">
+  <img src="images/workflow_detailed.png" alt="HTR Analysis Workflow" width="800">
+  <br>
+  <em>Complete HTR analysis workflow showing four main phases with "do until" logic for iterative processes</em>
+</p>
 
-    HasParams -->|No| Tune[🎯 TUNE PARAMETERS<br/>Tab 2<br/>━━━━━━━━━━<br/>• Load H5/video<br/>• Adjust params<br/>• Visual verify<br/>• Save params]
-    HasParams -->|Yes| Extract
-
-    Tune --> Extract[📊 EXTRACT FEATURES<br/>Tab 3: Prepare Data<br/>━━━━━━━━━━<br/>• Load H5 files<br/>• Apply parameters<br/>• Generate CSVs]
-
-    Extract --> HasModel{Have Trained<br/>ML Model?}
-
-    HasModel -->|Yes| Deploy
-    HasModel -->|No| HasLabels{Have Ground<br/>Truth Labels?}
-
-    HasLabels -->|Yes| Train
-    HasLabels -->|No| Label[🎨 LABEL GROUND TRUTH<br/>Tab 3: CSV Editor<br/>━━━━━━━━━━<br/>• Watch video<br/>• Note HTR times<br/>• Convert to frames<br/>• Edit CSV:<br/>  - 1 = HTR<br/>  - 0 = not HTR]
-
-    Label --> LabelReady{Labeling<br/>Complete?}
-    LabelReady -->|No| Label
-    LabelReady -->|Yes| Train
-
-    Train[🤖 ML MODEL TRAINING<br/>Tab 4<br/>━━━━━━━━━━<br/>• Load labeled CSVs<br/>• GridSearchCV XGBoost<br/>• Generate model .joblib<br/>• Confusion matrix<br/>• Misclassified CSV] --> Evaluate[📈 EVALUATE<br/>PERFORMANCE<br/>━━━━━━━━━━<br/>• Review confusion matrix<br/>• Check FN misses<br/>• Check FP false alarms]
-
-    Evaluate --> ModelOK{Performance<br/>Acceptable?}
-
-    ModelOK -->|No| Refine[🔄 ITERATIVE REFINEMENT<br/>━━━━━━━━━━<br/>• Review misclassified events<br/>• Watch videos<br/>• Fix label errors<br/>• Add more training data]
-    Refine --> Train
-
-    ModelOK -->|Yes| Deploy[🚀 DEPLOY<br/>Tab 5: Batch Processing<br/>━━━━━━━━━━<br/>• Fresh or Incremental mode<br/>• Extract features<br/>• Run predictions<br/>• Generate reports]
-
-    Deploy --> Done([✅ Analysis Complete!])
-
-    style Start fill:#e8f5e9,stroke:#4caf50,stroke-width:3px
-    style Tune fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
-    style Extract fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
-    style Label fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style Train fill:#ffe0b2,stroke:#ff5722,stroke-width:2px
-    style Evaluate fill:#ffccbc,stroke:#ff5722,stroke-width:2px
-    style Refine fill:#ffebee,stroke:#f44336,stroke-width:2px
-    style Deploy fill:#c8e6c9,stroke:#4caf50,stroke-width:2px
-    style Done fill:#a5d6a7,stroke:#4caf50,stroke-width:3px
-
-    style HasParams fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-    style HasModel fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-    style HasLabels fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-    style LabelReady fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-    style ModelOK fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-```
+**Key Concepts:**
+- **"Until" arrows** - Continue the process until the specified condition is met
+- **Phase containers** - Group related activities (Setup, Data Prep, Training, Deployment)
+- **Circular iteration** - The training phase includes a feedback loop for continuous improvement
+- **Prerequisites** - Manual HTR timestamps needed for initial parameter tuning
 
 ---
 
