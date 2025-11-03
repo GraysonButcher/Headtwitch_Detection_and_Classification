@@ -337,33 +337,20 @@ class HTRAnalysisAppV3(QMainWindow):
         config_layout.setContentsMargins(10, 15, 10, 10)
         config_layout.setSpacing(10)
 
-        # Instructions
-        instructions = QLabel(
-            "<b>Train XGBoost classifier:</b> "
-            "Load labeled CSV files, configure ML parameters, and train model."
+        # Training data status display
+        self.training_status_label = QLabel("Loading training data...")
+        self.training_status_label.setFont(QFont("Arial", 9))
+        self.training_status_label.setWordWrap(True)
+        self.training_status_label.setStyleSheet(
+            "background-color: #f8f9fa; padding: 10px; border-radius: 4px;"
         )
-        instructions.setFont(QFont("Arial", 9))
-        instructions.setWordWrap(True)
-        config_layout.addWidget(instructions)
+        config_layout.addWidget(self.training_status_label)
 
-        # Ground truth CSV selection
-        csv_layout = QHBoxLayout()
-        csv_label = QLabel("Ground Truth CSV:")
-        csv_label.setMinimumWidth(120)
-        csv_label.setFont(QFont("Arial", 9))
-        csv_layout.addWidget(csv_label)
-
-        self.training_csv_edit = QLineEdit()
-        self.training_csv_edit.setPlaceholderText("Select labeled feature CSV file")
-        self.training_csv_edit.setFont(QFont("Arial", 9))
-        csv_layout.addWidget(self.training_csv_edit)
-
-        browse_csv_btn = QPushButton("Browse...")
-        browse_csv_btn.setMaximumWidth(80)
-        browse_csv_btn.clicked.connect(self.browse_training_csv)
-        csv_layout.addWidget(browse_csv_btn)
-
-        config_layout.addLayout(csv_layout)
+        # Refresh button
+        refresh_training_btn = QPushButton("🔄 Refresh Training Data")
+        refresh_training_btn.setFont(QFont("Arial", 9))
+        refresh_training_btn.clicked.connect(self.refresh_training_status)
+        config_layout.addWidget(refresh_training_btn)
 
         # Parameters file (optional)
         param_layout = QHBoxLayout()
@@ -541,6 +528,10 @@ class HTRAnalysisAppV3(QMainWindow):
                 self.parameter_panel.refresh_project_status()
             except AttributeError:
                 pass
+
+        # Update Train Model tab status
+        if hasattr(self, 'training_status_label'):
+            self.refresh_training_status()
 
     # ==================== Signal Handlers ====================
 
@@ -726,16 +717,85 @@ class HTRAnalysisAppV3(QMainWindow):
 
     # ==================== Training Functions ====================
 
-    def browse_training_csv(self):
-        """Browse for ground truth CSV file."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Ground Truth CSV",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
+    def refresh_training_status(self):
+        """Scan training folder and display statistics with guidance."""
+        if not self.project_manager:
+            self.training_status_label.setText("⚠ No project loaded.")
+            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.train_model_btn.setEnabled(False)
+            return
+
+        project_path, project_config = self.project_manager.get_current_project()
+        if not project_path:
+            self.training_status_label.setText("⚠ No project loaded.")
+            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.train_model_btn.setEnabled(False)
+            return
+
+        training_folder = os.path.join(project_path, "training")
+
+        # Find CSV files in training folder
+        training_csvs = glob.glob(os.path.join(training_folder, "*.csv"))
+
+        if not training_csvs:
+            self.training_status_label.setText(
+                "⚠ <b>No training data found.</b><br>"
+                "Go to the <b>Prepare Data</b> tab and label some ground truth events first."
+            )
+            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.train_model_btn.setEnabled(False)
+            return
+
+        # Count labels across all files
+        total_htr = 0
+        total_non_htr = 0
+        total_events = 0
+
+        import pandas as pd
+        for csv_path in training_csvs:
+            try:
+                df = pd.read_csv(csv_path)
+                if 'ground_truth' in df.columns:
+                    df['ground_truth'] = df['ground_truth'].astype(str)
+                    total_htr += len(df[df['ground_truth'].isin(['1', '1.0'])])
+                    total_non_htr += len(df[df['ground_truth'].isin(['0', '0.0'])])
+            except:
+                pass  # Skip problematic files
+
+        total_events = total_htr + total_non_htr
+
+        # Determine if sufficient data
+        recommended_min = 100
+        recommended_ideal = 200
+
+        if total_events < recommended_min:
+            status_color = "#fff3cd"  # Yellow warning
+            status_icon = "⚠"
+            guidance = f"<br><i>Recommendation: Label at least {recommended_min-total_events} more events for reliable training.</i>"
+        elif total_events < recommended_ideal:
+            status_color = "#d1ecf1"  # Blue info
+            status_icon = "ℹ"
+            guidance = f"<br><i>Good start! {recommended_ideal-total_events} more events recommended for optimal performance.</i>"
+        else:
+            status_color = "#d4edda"  # Green success
+            status_icon = "✅"
+            guidance = "<br><i>Excellent! You have sufficient training data.</i>"
+
+        # Calculate class balance
+        class_balance = (total_htr/total_events*100) if total_events > 0 else 0
+
+        # Display status
+        self.training_status_label.setText(
+            f"{status_icon} <b>Training Data Status:</b><br>"
+            f"• <b>{len(training_csvs)} CSV files</b> in training folder<br>"
+            f"• <b>{total_events} labeled events:</b> {total_htr} HTR, {total_non_htr} Non-HTR<br>"
+            f"• <b>Class balance:</b> {class_balance:.1f}% positive"
+            f"{guidance}"
         )
-        if file_path:
-            self.training_csv_edit.setText(file_path)
+        self.training_status_label.setStyleSheet(f"background-color: {status_color}; padding: 10px; border-radius: 4px;")
+
+        # Enable train button if sufficient data
+        self.train_model_btn.setEnabled(total_events >= 50)  # Absolute minimum
 
     def browse_training_params(self):
         """Browse for training parameters file."""
@@ -749,18 +809,9 @@ class HTRAnalysisAppV3(QMainWindow):
             self.training_param_edit.setText(file_path)
 
     def train_model(self):
-        """Train HTR detection model."""
+        """Train HTR detection model using all files in training folder."""
         if not self.project_manager:
             QMessageBox.warning(self, "Error", "No project loaded.")
-            return
-
-        csv_path = self.training_csv_edit.text().strip()
-        if not csv_path:
-            QMessageBox.warning(self, "Error", "Please select a ground truth CSV file.")
-            return
-
-        if not os.path.exists(csv_path):
-            QMessageBox.warning(self, "Error", f"CSV file not found: {csv_path}")
             return
 
         project_path, project_config = self.project_manager.get_current_project()
@@ -768,11 +819,22 @@ class HTRAnalysisAppV3(QMainWindow):
             QMessageBox.warning(self, "Error", "No project loaded.")
             return
 
+        training_folder = os.path.join(project_path, "training")
+        training_csvs = glob.glob(os.path.join(training_folder, "*.csv"))
+
+        if not training_csvs:
+            QMessageBox.warning(
+                self, "No Training Data",
+                "No training data found. Label some ground truth events first."
+            )
+            return
+
         # Confirm training
         reply = QMessageBox.question(
             self,
             "Train Model",
-            f"Train HTR detection model using:\n\n{os.path.basename(csv_path)}\n\nThis may take several minutes. Continue?",
+            f"Train HTR detection model using {len(training_csvs)} labeled CSV file(s)?\n\n"
+            f"This may take several minutes. Continue?",
             QMessageBox.Yes | QMessageBox.No
         )
 
@@ -785,6 +847,20 @@ class HTRAnalysisAppV3(QMainWindow):
             sys.path.append(os.path.dirname(project_path))
             from core.ml_models import ModelTrainer
             from core.config import ConfigManager
+            import pandas as pd
+
+            # Load and combine all training CSVs
+            self.show_training_progress(f"Loading {len(training_csvs)} training files...")
+            combined_df = pd.concat([pd.read_csv(f) for f in training_csvs], ignore_index=True)
+
+            # Filter out unlabeled rows
+            combined_df = combined_df[combined_df['ground_truth'] != '__']
+
+            self.show_training_progress(f"Combined dataset: {len(combined_df)} labeled events")
+
+            # Save combined CSV temporarily
+            temp_combined_path = os.path.join(training_folder, "_combined_training_data.csv")
+            combined_df.to_csv(temp_combined_path, index=False)
 
             # Load parameters
             param_path = self.training_param_edit.text().strip()
@@ -807,9 +883,9 @@ class HTRAnalysisAppV3(QMainWindow):
 
             self.show_training_progress("Starting training...")
 
-            # Train model using ModelTrainer
+            # Train model using ModelTrainer with combined CSV
             features_folder = os.path.join(project_path, "features")
-            results = trainer.train_model(features_folder, csv_path, model_file)
+            results = trainer.train_model(features_folder, temp_combined_path, model_file)
 
             if not results.get('success', False):
                 error_msg = results.get('error', 'Unknown error')
@@ -835,7 +911,7 @@ class HTRAnalysisAppV3(QMainWindow):
             self.show_training_progress(f"Precision: {precision:.3f} | Recall: {recall:.3f} | F1: {f1_score:.3f}")
 
             # Generate confusion matrix and misclassified events
-            self._generate_training_analysis(csv_path, model_file, project_path, training_details)
+            self._generate_training_analysis(temp_combined_path, model_file, project_path, training_details)
 
             # Enable evaluation buttons
             self.load_misclass_btn.setEnabled(True)

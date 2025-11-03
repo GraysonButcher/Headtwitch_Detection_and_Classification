@@ -23,8 +23,9 @@ class CSVEditorWidget(QWidget):
     labels_changed = Signal()  # Emitted when labels are modified
     progress_updated = Signal(int, int)  # Emitted with (labeled_count, total_count)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, project_manager=None):
         super().__init__(parent)
+        self.project_manager = project_manager
         self.csv_path = None
         self.df = None
         self.unlabeled_value = '__'
@@ -112,10 +113,17 @@ class CSVEditorWidget(QWidget):
 
     def load_csv_dialog(self):
         """Open file dialog to load a CSV file."""
+        # Determine default path
+        default_path = ""
+        if self.project_manager:
+            project_path, _ = self.project_manager.get_current_project()
+            if project_path:
+                default_path = os.path.join(project_path, "features")
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Feature CSV File",
-            "",
+            default_path,
             "CSV Files (*.csv);;All Files (*)"
         )
         if file_path:
@@ -330,23 +338,102 @@ class CSVEditorWidget(QWidget):
         self.progress_updated.emit(labeled_rows, total_rows)
 
     def save_csv(self):
-        """Save changes back to the CSV file."""
+        """Save changes and move to training folder if labels exist."""
         if self.df is None or self.csv_path is None:
             return
 
         try:
+            # Save changes to current location first
             self.df.to_csv(self.csv_path, index=False)
-            QMessageBox.information(
-                self,
-                "Saved",
-                f"Ground truth labels saved successfully to:\n{os.path.basename(self.csv_path)}"
-            )
+
+            # Check if file has ANY labels (not just __)
+            labeled_count = len(self.df[self.df['ground_truth'] != self.unlabeled_value])
+
+            if labeled_count > 0 and self.project_manager:
+                # File has labels - attempt to move to training folder
+                moved = self._move_to_training_folder()
+                if moved:
+                    QMessageBox.information(
+                        self,
+                        "Saved",
+                        f"Ground truth labels saved successfully!\n\n"
+                        f"✓ {labeled_count} events labeled\n"
+                        f"✓ File moved to training/ folder"
+                    )
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Saved",
+                        f"Ground truth labels saved successfully!\n\n"
+                        f"{labeled_count} events labeled"
+                    )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Saved",
+                    f"Ground truth labels saved successfully to:\n{os.path.basename(self.csv_path)}"
+                )
+
         except Exception as e:
             QMessageBox.critical(
                 self,
                 "Error Saving",
                 f"Failed to save CSV file:\n{str(e)}"
             )
+
+    def _move_to_training_folder(self) -> bool:
+        """
+        Move CSV file from features/ to training/ folder.
+
+        Returns:
+            True if file was moved, False if not (already in training or error)
+        """
+        if not self.project_manager:
+            return False
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            return False
+
+        # Get paths
+        features_folder = os.path.join(project_path, "features")
+        training_folder = os.path.join(project_path, "training")
+
+        # Check if file is in features folder
+        if not self.csv_path.startswith(features_folder):
+            # File is not in features folder (might already be in training or elsewhere)
+            return False
+
+        # Calculate destination path
+        filename = os.path.basename(self.csv_path)
+        dest_path = os.path.join(training_folder, filename)
+
+        # Check if destination already exists
+        if os.path.exists(dest_path):
+            # File already exists in training, just update it in place
+            import shutil
+            shutil.copy2(self.csv_path, dest_path)
+            os.remove(self.csv_path)
+        else:
+            # Move file
+            import shutil
+            shutil.move(self.csv_path, dest_path)
+
+        # Update internal path
+        self.csv_path = dest_path
+
+        # Update project config with training stats
+        stats = self.get_labeling_stats()
+        self.project_manager.add_training_file(
+            filename,
+            stats['htr_count'],
+            stats['non_htr_count']
+        )
+
+        # Update file label to show new location
+        self.file_label.setText(f"📄 {filename} (Training Data)")
+
+        return True
 
     def get_labeling_stats(self) -> dict:
         """

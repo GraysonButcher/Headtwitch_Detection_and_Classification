@@ -166,7 +166,7 @@ class PrepareDataTab(QWidget):
         label_layout.addWidget(instructions)
 
         # CSV Editor Widget
-        self.csv_editor = CSVEditorWidget(self)
+        self.csv_editor = CSVEditorWidget(self, project_manager=self.project_manager)
         self.csv_editor.labels_changed.connect(self.on_labels_changed)
         self.csv_editor.progress_updated.connect(self.on_labeling_progress_updated)
         label_layout.addWidget(self.csv_editor)
@@ -191,6 +191,9 @@ class PrepareDataTab(QWidget):
     def set_project_manager(self, project_manager):
         """Set the project manager and refresh display."""
         self.project_manager = project_manager
+        # Update CSV editor with new project manager
+        if hasattr(self, 'csv_editor'):
+            self.csv_editor.project_manager = project_manager
         self.refresh_status()
 
     def refresh_status(self):
