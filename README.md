@@ -4,17 +4,7 @@
 
 # Head-Twitch Response Detection & Classification Tool
 
-A comprehensive desktop application for detecting and analyzing Head-Twitch Responses (HTRs) in rodent behavioral videos using SLEAP pose-tracking data and machine learning. This tool provides a structured 5-tab workflow from parameter tuning to model deployment.
-
-## Features
-
-- 🎯 **Real-time Parameter Tuning**: Adjust detection parameters with immediate video/signal feedback
-- 📊 **Dual Detection Methods**: Combines ear movement and head oscillation detection
-- 🤖 **Machine Learning Pipeline**: Complete workflow for training and applying XGBoost classifiers
-- 📦 **Smart Batch Processing**: Fresh and incremental processing modes
-- 🎨 **Built-in CSV Editor**: Label ground truth data directly in the application
-- 📈 **Interactive Visualization**: Real-time signal plots with event overlays
-- 🔄 **Model Iteration Tools**: Evaluate performance, review misclassified events, and retrain
+A comprehensive desktop application for detecting and analyzing Head-Twitch Responses (HTRs) in rodent behavioral videos using SLEAP pose-tracking data and machine learning. This tool provides a structured workflow from parameter tuning to model deployment.
 
 ## Installation
 
