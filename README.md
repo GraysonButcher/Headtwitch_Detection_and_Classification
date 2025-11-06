@@ -102,6 +102,10 @@ flowchart LR
 
 **Required Setup:** The detection algorithms require SLEAP H5 tracking data with 5 specific bodyparts (Left Ear, Right Ear, Head, Nose, Back) filmed from a top-down camera angle.
 
+| Column 1                                                                              |                                                                        Column 2        |
+|---------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| Text or image here                                                                    |                           Text or image here                                           |
+
 <p align="center">
   <img src="docs/screenshots/combined_detection_graphic.png" alt="HTR Detection Methods" width="700">
   <br>
@@ -110,9 +114,7 @@ flowchart LR
 
 The tool uses **two complementary detection methods**:
 
-| Column 1 | Column 2 |
-|-----------|-----------|
-| Text or image here | Text or image here |
+
 
 
 ### **1. Ear Detector**
