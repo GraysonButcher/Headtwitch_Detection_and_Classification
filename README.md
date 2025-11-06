@@ -102,17 +102,39 @@ flowchart LR
 
 **Required Setup:** The detection algorithms require SLEAP H5 tracking data with 5 specific bodyparts (Left Ear, Right Ear, Head, Nose, Back) filmed from a top-down camera angle.
 
-| Column 1                                                                              |                                                                        Column 2        |
-|---------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| Text or image here                                                                    |                           Text or image here                                           |
-
-<p align="center">
-  <img src="docs/screenshots/combined_detection_graphic.png" alt="HTR Detection Methods" width="700">
-  <br>
-  <em>Dual detection methods: Ear oscillations (top) and head oscillations (bottom) with detected events highlighted</em>
-</p>
-
 The tool uses **two complementary detection methods**:
+
+<div style="display:flex; flex-wrap:wrap; margin:0 -12px;">
+  <!-- Column 1 -->
+  <div style="flex:1 1 360px; padding:0 12px;">
+    <h3><strong>1. Ear Detector</strong></h3>
+    <p>Analyzes rapid oscillations in the distance between left and right ears.</p>
+    <ul>
+      <li>Detects “crisscross” patterns when ears move independently</li>
+      <li>Configurable thresholds for peak/valley detection</li>
+      <li>Gap tolerance for fragmented events</li>
+    </ul>
+
+    <img src="docs/screenshots/ear_detection_graphic.png" alt="Ear detector visualization 1" style="width:100%; height:auto;"/>
+    <img src="docs/screenshots/ear_detect.png" alt="Ear detector visualization 2" style="width:100%; height:auto;"/>
+  </div>
+
+  <!-- Column 2 -->
+  <div style="flex:1 1 360px; padding:0 12px;">
+    <h3><strong>2. Head Detector</strong></h3>
+    <p>Detects rapid head position changes relative to body midline.</p>
+    <ul>
+      <li>Uses amplitude and frequency analysis of head oscillations</li>
+      <li>Smoothing and cycle detection for noise filtering</li>
+      <li>Prominence-based peak detection</li>
+    </ul>
+
+    <img src="docs/screenshots/head_detection_graphic.png" alt="Module 2 visualization 1" style="width:100%; height:auto;"/>
+    <img src="docs/screenshots/head_detect.png" alt="Module 2 visualization 2" style="width:100%; height:auto;"/>
+  </div>
+</div>
+
+
 
 
 
