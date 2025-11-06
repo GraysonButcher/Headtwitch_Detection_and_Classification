@@ -19,14 +19,11 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
   - *Note: Support for other pose estimation formats (DeepLabCut, etc.) planned for future releases*
 - **Camera view:** Top-down view of the animal required
 - **Bodypart labels:** Videos must be tracked with these 5 specific keypoints:
-  - **Left Ear**
-  - **Right Ear**
-  - **Head** (center of head)
-  - **Nose** (snout tip)
-  - **Back** (base of neck/shoulders)
+  - Left Ear, Right Ear, Nose, Head, Back
+
 
 <p align="center">
-  <img src="docs/images/rat_labels_overhead_ex2.png" alt="Required Bodypart Labels" width="400">
+  <img src="docs/images/rat_labels_overhead_ex2.png" alt="Required Bodypart Labels" width="200">
   <br>
   <em>Required bodypart label placement (overhead view)</em>
 </p>
@@ -50,20 +47,21 @@ hdac  # Launch the application
 
 ## Using H-DaC
 
-### Ready to Predict HTRs?
-**You have a trained model and parameters ready to go:**
+### Scenario 1: [Ready to Predict HTRs](docs/workflow.md#deployment-fresh)
+(Choose this scenario if you already have tuned detection parameters and a trained model) 
+1. **(Jump to) New Project** → [Deployment Guide: Fresh Start](docs/workflow.md#deployment-fresh)
+2. **(Jump to) Existing Project** → [Deployment Guide: Incremental Analysis](docs/workflow.md#deployment-incremental)
 
-- **📁 Starting a fresh project** → [Deployment Guide: Fresh Start](docs/workflow.md#deployment-fresh)
-- **➕ Adding to an existing project** → [Deployment Guide: Incremental Analysis](docs/workflow.md#deployment-incremental)
+### Scenario 2: [Need to Prepare Your Detection System](docs/workflow.md#prepare-data)
+(Choose this scenario if you're starting completely fresh or haven't finished tuning
+parameters, labeling data, or training a model)
+1. **(Jump to) Tune detection parameters** → [Parameter Tuning Guide](docs/parameter_tuning_guide.md)
+2. **(Jump to) Label ground truth data** → [Ground Truth Labeling Guide](docs/workflow.md#prepare-data)
+3. **(Jump to) Train your model** → [Model Training Guide](docs/workflow.md#train-model)
 
-### Need to Prepare Your Detection System?
-**You're setting up HTR detection for the first time:**
+---
 
-1. **🎯 Tune detection parameters** → [Parameter Tuning Guide](docs/parameter_tuning_guide.md)
-2. **✏️ Label ground truth data** → [Ground Truth Labeling Guide](docs/workflow.md#prepare-data)
-3. **🧠 Train your model** → [Model Training Guide](docs/workflow.md#train-model)
-
-### How Does H-DaC Work?
+## How Does H-DaC Work?
 **Understanding the detection methods:**
 
 The tool uses **two complementary detection methods** to identify HTR events:
