@@ -6,9 +6,9 @@
 
 A comprehensive desktop application for detecting and analyzing Head-Twitch Responses (HTRs) in rodent behavioral videos using SLEAP pose-tracking data and machine learning. This tool provides a structured workflow from parameter tuning to model deployment.
 
-## Installation
+---
 
-### Prerequisites
+## Prerequisites
 
 **Software:**
 - Python 3.9 or higher
@@ -31,96 +31,42 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
   <em>Required bodypart label placement (overhead view)</em>
 </p>
 
-*The tool uses ear and head movement patterns to detect HTR events*
+---
 
-### Quick Install
-
-**Option 1: Pip Install (Recommended)**
+## Quick Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification.git
-cd Headtwitch_Detection_and_Classification
-
-# Create a virtual environment (recommended)
-python -m venv htr_env
-
-# Activate the virtual environment:
-# On Windows:
-htr_env\Scripts\activate
-# On macOS/Linux:
-source htr_env/bin/activate
-
-# Install H-DaC
-pip install -e .
-
-# Launch the application
-hdac
-```
-
-**Option 2: Manual Setup**
-
-If you prefer to run without installing:
-
-```bash
-# Clone and setup environment (same as above)
 git clone https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification.git
 cd Headtwitch_Detection_and_Classification
 python -m venv htr_env
-# Activate environment...
-
-# Install dependencies only
-pip install -r requirements.txt
-
-# Launch the application
-python test_gui_v3.py
-```
-
-**Using Conda:**
-
-You can also use conda instead of venv:
-```bash
-conda create -n htr python=3.10
-conda activate htr
+htr_env\Scripts\activate  # On Windows
 pip install -e .
-hdac
+hdac  # Launch the application
 ```
 
-👉 **For detailed installation instructions and troubleshooting**, see [docs/installation.md](docs/installation.md) (coming soon)
+👉 **[Full installation guide with all options →](docs/installation.md)** (conda, manual setup, troubleshooting)
 
-## Quick Start
+---
 
-**5-Minute Walkthrough:**
+## Using H-DaC
 
-1. Launch the application: `hdac` (or `python test_gui_v3.py` if not installed)
-2. Create/Open a project: **File → New Project**
-3. Navigate through the 5-tab workflow (see below)
+### Ready to Predict HTRs?
+**You have a trained model and parameters ready to go:**
 
-## Workflow Overview
+- **📁 Starting a fresh project** → [Deployment Guide: Fresh Start](docs/workflow.md#deployment-fresh)
+- **➕ Adding to an existing project** → [Deployment Guide: Incremental Analysis](docs/workflow.md#deployment-incremental)
 
-```mermaid
-flowchart LR
-    A[1. Tune Parameters] --> B[2. Prepare Data]
-    B --> C[3. Train Model]
-    C --> D{Model OK?}
-    D -->|No| B
-    D -->|Yes| E[4. Deploy]
+### Need to Prepare Your Detection System?
+**You're setting up HTR detection for the first time:**
 
-    style A fill:#e3f2fd
-    style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style D fill:#ffebee
-    style E fill:#e8f5e9
-```
+1. **🎯 Tune detection parameters** → [Parameter Tuning Guide](docs/parameter_tuning_guide.md)
+2. **✏️ Label ground truth data** → [Ground Truth Labeling Guide](docs/workflow.md#prepare-data)
+3. **🧠 Train your model** → [Model Training Guide](docs/workflow.md#train-model)
 
-👉 **[View detailed workflow with decision points →](docs/workflow.md)**
+### How Does H-DaC Work?
+**Understanding the detection methods:**
 
-
-## How HTR Detection Works
-
-**Required Setup:** The detection algorithms require SLEAP H5 tracking data with 5 specific bodyparts (Left Ear, Right Ear, Head, Nose, Back) filmed from a top-down camera angle.
-
-The tool uses **two complementary detection methods:**
+The tool uses **two complementary detection methods** to identify HTR events:
 
 | *Ear Detector Approach* | *Head Detector Approach* |
 |:--:|:--:|
@@ -128,36 +74,44 @@ The tool uses **two complementary detection methods:**
 | *Real Ear Example* | *Real Head Example* |
 | <img src="docs/screenshots/ear_detect.png" width="400"> | <img src="docs/screenshots/head_detect.png" width="400"> |
 
-
-
-
 **Event Confidence Levels:**
 - **Combined (Green)**: Detected by both methods → High confidence
 - **Ear Only (Orange)**: Detected by ear method only → Medium confidence
 - **Head Only (Red)**: Detected by head method only → Medium confidence
 
-Events are then classified using a trained XGBoost model that learns from user-labeled ground truth data.
+Events are classified using a trained XGBoost model that learns from user-labeled ground truth data.
+
+👉 **[Read detailed methods documentation →](docs/detection_methods.md)**
+
+### Need Help?
+- **❓ Common issues and solutions** → [FAQ & Troubleshooting](docs/faq.md)
+- **🐛 Report a bug** → [GitHub Issues](https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/issues)
+- **💬 Ask questions** → [GitHub Discussions](https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/discussions)
+
+---
 
 ## Documentation
+
+Complete documentation available in the [`/docs`](docs/) directory:
 
 | Guide | Status | Description |
 |-------|--------|-------------|
 | **[Setup Guide](docs/setup_guide.md)** | ✅ Available | Hardware setup, camera configuration, SLEAP tracking |
-| **[How H-DaC Works](docs/detection_methods.md)** | ✅ Available | Detailed explanation of dual detection methods |
+| **[Detection Methods](docs/detection_methods.md)** | ✅ Available | Detailed explanation of dual detection methods |
 | **[Workflow Guide](docs/workflow.md)** | ✅ Available | Complete end-to-end workflow with decision points |
-| **[Installation Guide](docs/installation.md)** | 🚧 Coming Soon | Detailed software installation, conda/pip, troubleshooting |
-| **[Quick Start Tutorial](docs/quickstart.md)** | 🚧 Coming Soon | 5-minute first-run walkthrough |
+| **[Installation Guide](docs/installation.md)** | 🚧 Coming Soon | Detailed software installation options and troubleshooting |
 | **[Parameter Tuning Guide](docs/parameter_tuning_guide.md)** | 🚧 Coming Soon | Understanding and adjusting detection parameters |
 | **[FAQ & Troubleshooting](docs/faq.md)** | 🚧 Coming Soon | Common questions and issues |
 
 📹 **Video Tutorials** - Coming soon!
 
+---
+
 ## Configuration
 
 ### Node Mapping
 
-SLEAP exports can have different node orderings. Configure the correct mapping via:
-- **Settings > Configure Node Mapping**
+SLEAP exports can have different node orderings. Configure via **Settings > Configure Node Mapping**.
 
 Common formats:
 - Format 1: Left Ear=0, Right Ear=1, Back=2, Nose=3, Head=4
@@ -169,41 +123,7 @@ Detection parameters can be saved and loaded as JSON files:
 - **File > Export Parameters**: Save current parameter configuration
 - **File > Import Parameters**: Load saved parameter configuration
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Import Errors**: Ensure all dependencies are installed with `pip install -r requirements.txt`
-2. **H5 File Errors**: Verify your H5 files are valid SLEAP exports with `tracks` and `point_scores` datasets
-3. **Node Mapping Issues**: Check that node indices match your SLEAP export format
-4. **Performance Issues**: For large datasets, consider processing files in smaller batches
-
-### Getting Help
-
-- Run `python test_app.py` to verify your installation
-- Check the console output for detailed error messages
-- Ensure your H5 files contain the required SLEAP datasets
-
-## Requirements
-
-See `requirements.txt` for the complete list of dependencies. Key requirements include:
-
-- PySide6 (GUI framework)
-- OpenCV (video processing)  
-- scikit-learn & XGBoost (machine learning)
-- matplotlib & seaborn (plotting)
-- pandas & numpy (data processing)
-- h5py (HDF5 file reading)
-
-## Project Structure
-
-The application is structured with a modular architecture:
-
-- `core/`: Backend modules for detection algorithms, ML models, and data processing
-- `gui_v2/`: PySide6 GUI components (tabs, widgets, dialogs)
-- `test_gui_v3.py`: Application entry point (v3)
-- `docs/`: Documentation and guides (coming soon)
-- `examples/`: Sample data and configurations (coming soon)
+---
 
 ## Citation
 
@@ -218,6 +138,8 @@ If you use this tool in your research, please cite:
 }
 ```
 
+---
+
 ## License
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
@@ -229,11 +151,6 @@ Contributions are welcome! Please feel free to:
 - Submit pull requests with improvements
 - Share your parameter configurations or training data
 
-## Support
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/discussions)
-
 ---
 
-**Status**: Active Development | **Version**: 3.0 | **Last Updated**: January 2025
+**Status**: Active Development | **Version**: 3.0.0 | **Last Updated**: January 2025
