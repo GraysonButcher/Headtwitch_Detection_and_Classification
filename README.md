@@ -97,94 +97,6 @@ flowchart LR
 
 👉 **[View detailed workflow with decision points →](docs/workflow.md)**
 
-The application provides a structured 5-tab workflow for HTR detection and analysis:
-
-### **Tab 1: Welcome**
-
-Your starting point - provides project overview and quick navigation to key workflow stages.
-
-- View workflow cards with status indicators
-- Quick-jump to Tune Parameters, Prepare Data, Train Model, or Deploy
-- Project information and recent activity
-
-### **Tab 2: Tune Parameters**
-
-Real-time parameter tuning with video feedback.
-
-**Features:**
-- Load video (.mp4, .avi) and SLEAP H5 tracking file
-- Interactive signal visualization (left ear, right ear, head→midline distance)
-- Real-time parameter adjustment panel (Ear Detector, Head Detector, General Settings)
-- Reanalyze current view or full video with new parameters
-- Event detection overlays color-coded by method:
-  - **Green**: Combined (both methods)
-  - **Orange**: Ear detector only
-  - **Red**: Head detector only
-- Save/load parameter configurations
-
-**Workflow:**
-1. Load H5 file (configure node mapping in dialog)
-2. Load corresponding video
-3. Adjust detection parameters while viewing signal plots
-4. Click "Reanalyze Current View" for fast feedback
-5. Click "Reanalyze Full Video" once satisfied
-6. Save optimized parameters for feature extraction
-
-### **Tab 3: Prepare Data**
-
-Feature extraction and ground truth labeling.
-
-**Features:**
-- Extract features from H5 files using tuned parameters
-- Built-in CSV editor for ground truth labeling
-- Mark events as HTR (1) or non-HTR (0)
-- Prepare balanced training datasets
-
-**Workflow:**
-1. Select input folder containing H5 files
-2. Extract features → generates feature CSV files
-3. Open CSV files in built-in editor
-4. Label ground truth for each candidate event
-5. Save labeled data for model training
-
-### **Tab 4: Train Model**
-
-Machine learning model training and evaluation.
-
-**Features:**
-- Train XGBoost classifier on labeled data
-- Cross-validation with 80/20 train/test split
-- Performance metrics (accuracy, precision, recall, F1-score)
-- Confusion matrix visualization
-- Misclassified events analysis
-- Iterative improvement workflow
-
-**Workflow:**
-1. Load labeled CSV file (ground truth)
-2. Optionally load parameter configuration
-3. Train model → generates .joblib model file
-4. Review performance metrics
-5. Load misclassified events to identify labeling errors
-6. Fix labels in Prepare Data tab → retrain → improve accuracy
-
-### **Tab 5: Deploy**
-
-Batch processing for production analysis.
-
-**Features:**
-- **Fresh Processing**: Analyze new videos from scratch
-- **Incremental Processing**: Add new videos to existing results
-- Smart duplicate detection
-- Progress tracking for large batches
-- Export results to CSV
-
-**Workflow:**
-1. Select processing mode (Fresh or Incremental)
-2. Choose input folder with H5 files
-3. Load trained model (.joblib)
-4. Load parameter configuration (optional)
-5. Run batch processing
-6. Review output CSV with HTR detection results
 
 ## How HTR Detection Works
 
@@ -197,6 +109,11 @@ Batch processing for production analysis.
 </p>
 
 The tool uses **two complementary detection methods**:
+
+| Column 1 | Column 2 |
+|-----------|-----------|
+| Text or image here | Text or image here |
+
 
 ### **1. Ear Detector**
 Analyzes rapid oscillations in the distance between left and right ears.
