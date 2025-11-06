@@ -35,38 +35,56 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
 
 ### Quick Install
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification.git
-   cd Headtwitch_Detection_and_Classification
-   ```
+**Option 1: Pip Install (Recommended)**
 
-2. **Create a conda environment (recommended)**
-   ```bash
-   conda create -n htr python=3.10
-   conda activate htr
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification.git
+cd Headtwitch_Detection_and_Classification
 
-   **Or use virtualenv:**
-   ```bash
-   python -m venv htr_env
+# Create a virtual environment (recommended)
+python -m venv htr_env
 
-   # Activate the virtual environment:
-   # On Windows:
-   htr_env\Scripts\activate
-   # On macOS/Linux:
-   source htr_env/bin/activate
-   ```
+# Activate the virtual environment:
+# On Windows:
+htr_env\Scripts\activate
+# On macOS/Linux:
+source htr_env/bin/activate
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Install H-DaC
+pip install -e .
 
-4. **Launch the application**
-   ```bash
-   python test_gui_v3.py
-   ```
+# Launch the application
+hdac
+```
+
+**Option 2: Manual Setup**
+
+If you prefer to run without installing:
+
+```bash
+# Clone and setup environment (same as above)
+git clone https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification.git
+cd Headtwitch_Detection_and_Classification
+python -m venv htr_env
+# Activate environment...
+
+# Install dependencies only
+pip install -r requirements.txt
+
+# Launch the application
+python test_gui_v3.py
+```
+
+**Using Conda:**
+
+You can also use conda instead of venv:
+```bash
+conda create -n htr python=3.10
+conda activate htr
+pip install -e .
+hdac
+```
 
 👉 **For detailed installation instructions and troubleshooting**, see [docs/installation.md](docs/installation.md) (coming soon)
 
@@ -74,7 +92,7 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
 
 **5-Minute Walkthrough:**
 
-1. Launch the application: `python test_gui_v3.py`
+1. Launch the application: `hdac` (or `python test_gui_v3.py` if not installed)
 2. Create/Open a project: **File → New Project**
 3. Navigate through the 5-tab workflow (see below)
 

@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hdac"
+version = "3.0.0"
+description = "Head-Twitch Response Detection & Classification Tool for rodent behavioral analysis"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Grayson Butcher", email = "grayson.butcher@example.com"}
+]
+keywords = ["neuroscience", "behavior", "head-twitch", "SLEAP", "pose-estimation", "rodent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "numpy>=1.21.0",
+    "pandas>=1.3.0",
+    "scipy>=1.7.0",
+    "h5py>=3.1.0",
+    "scikit-learn>=1.0.0",
+    "xgboost>=1.5.0",
+    "opencv-python>=4.5.0",
+    "PySide6>=6.2.0",
+    "matplotlib>=3.4.0",
+    "seaborn>=0.11.0",
+    "imageio>=2.9.0",
+    "openpyxl>=3.0.9",
+    "joblib>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-qt>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification"
+Repository = "https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification"
+Issues = "https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/issues"
+Documentation = "https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/tree/main/docs"
+
+[project.scripts]
+hdac = "hdac.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["hdac*", "core*", "gui_v2*"]
+exclude = ["tests*", "gui_v2_backups*", "legacy_components*"]
