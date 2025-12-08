@@ -6,7 +6,7 @@ New 5-tab workflow structure:
 2. Tune Parameters - Parameter optimization with video feedback
 3. Prepare Data - Feature extraction + ground truth labeling
 4. Train Model - ML training with evaluation and iteration
-5. Deploy - Smart batch processing (fresh and incremental)
+5. Identify Headtwitches - Smart batch processing (fresh and incremental)
 
 Version: 3.0 (2025-10-15)
 """
@@ -202,7 +202,7 @@ class HTRAnalysisAppV3(QMainWindow):
         # Tab 4: Train Model
         self.create_train_model_tab()
 
-        # Tab 5: Deploy (formerly Batch Process)
+        # Tab 5: Identify Headtwitches (formerly Deploy/Batch Process)
         self.create_deploy_tab()
 
     def create_welcome_tab(self):
@@ -489,18 +489,18 @@ class HTRAnalysisAppV3(QMainWindow):
         parent_layout.addWidget(progress_group)
 
     def create_deploy_tab(self):
-        """Tab 5: Deploy - Smart batch processing."""
+        """Tab 5: Identify Headtwitches - Smart batch processing."""
         try:
             self.deploy_tab = DeployTab(parent=self, project_manager=self.project_manager)
             # Connect signals
             self.deploy_tab.processing_complete.connect(self.on_processing_complete)
-            self.tab_widget.addTab(self.deploy_tab, "Deploy")
+            self.tab_widget.addTab(self.deploy_tab, "Identify Headtwitches")
         except Exception as e:
             # Fallback
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
-            fallback_layout.addWidget(QLabel(f"Deploy Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Deploy")
+            fallback_layout.addWidget(QLabel(f"Identify Headtwitches Tab Error: {str(e)}"))
+            self.tab_widget.addTab(fallback_widget, "Identify Headtwitches")
 
     # ==================== Tab Navigation ====================
 
@@ -517,7 +517,7 @@ class HTRAnalysisAppV3(QMainWindow):
             self.prepare_data_tab.set_project_manager(self.project_manager)
             self.prepare_data_tab.refresh_status()
 
-        # Update Deploy tab
+        # Update Identify Headtwitches tab
         if hasattr(self, 'deploy_tab'):
             self.deploy_tab.set_project_manager(self.project_manager)
             self.deploy_tab.refresh_status()
@@ -537,7 +537,7 @@ class HTRAnalysisAppV3(QMainWindow):
 
     def on_features_extracted(self):
         """Handle features extracted signal."""
-        # Refresh Deploy tab status
+        # Refresh Identify Headtwitches tab status
         if hasattr(self, 'deploy_tab'):
             self.deploy_tab.refresh_status()
 

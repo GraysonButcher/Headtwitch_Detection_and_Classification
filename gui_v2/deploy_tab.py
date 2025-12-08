@@ -8,11 +8,15 @@ Automatically detects new files and offers appropriate processing options.
 import os
 import sys
 import glob
+import shutil
+import subprocess
+import pandas as pd
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QPushButton, QLineEdit, QProgressBar, QTextEdit, QMessageBox,
-    QFileDialog, QRadioButton, QButtonGroup
+    QFileDialog, QRadioButton, QButtonGroup, QDialog, QTableWidget,
+    QTableWidgetItem, QHeaderView, QComboBox
 )
 from PySide6.QtCore import Qt, QDateTime, Signal
 from PySide6.QtGui import QFont
@@ -52,6 +56,9 @@ class DeployTab(QWidget):
         # Project status
         self.create_status_section(layout)
 
+        # Input data management
+        self.create_input_data_section(layout)
+
         # Model and parameters configuration
         self.create_config_section(layout)
 
@@ -61,6 +68,9 @@ class DeployTab(QWidget):
         # Processing buttons
         self.create_processing_buttons_section(layout)
 
+        # Results viewing
+        self.create_results_section(layout)
+
         # Progress section
         self.create_progress_section(layout)
 
@@ -69,13 +79,13 @@ class DeployTab(QWidget):
 
     def create_instructions_section(self, parent_layout):
         """Instructions header."""
-        instructions_group = QGroupBox("Production Deployment")
+        instructions_group = QGroupBox("Identify Headtwitches")
         instructions_layout = QVBoxLayout(instructions_group)
         instructions_layout.setContentsMargins(10, 10, 10, 10)
 
         instructions = QLabel(
-            "<b>Deploy trained models to analyze data:</b> "
-            "Select a model, choose processing mode (fresh or incremental), and run the pipeline."
+            "<b>Use trained models to identify head-twitch responses in your data:</b> "
+            "Select a model, choose processing mode (fresh or incremental), and extract features or predict HTRs."
         )
         instructions.setFont(QFont("Arial", 10))
         instructions.setWordWrap(True)
@@ -104,6 +114,32 @@ class DeployTab(QWidget):
 
         parent_layout.addWidget(status_group)
 
+    def create_input_data_section(self, parent_layout):
+        """Input data management section."""
+        input_group = QGroupBox("Input Data")
+        input_layout = QHBoxLayout(input_group)
+        input_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Add H5 files button
+        self.add_h5_btn = QPushButton("📁 Add H5 Files...")
+        self.add_h5_btn.setFont(QFont("Arial", 9))
+        self.add_h5_btn.setToolTip("Browse and add H5 tracking files to project/input/ folder")
+        self.add_h5_btn.clicked.connect(self.add_h5_files)
+        self.add_h5_btn.setEnabled(False)
+        input_layout.addWidget(self.add_h5_btn)
+
+        # Open input folder button
+        self.open_input_btn = QPushButton("📂 Open Input Folder")
+        self.open_input_btn.setFont(QFont("Arial", 9))
+        self.open_input_btn.setToolTip("Open the project input folder in file explorer")
+        self.open_input_btn.clicked.connect(self.open_input_folder)
+        self.open_input_btn.setEnabled(False)
+        input_layout.addWidget(self.open_input_btn)
+
+        input_layout.addStretch()
+
+        parent_layout.addWidget(input_group)
+
     def create_config_section(self, parent_layout):
         """Model and parameters configuration."""
         config_group = QGroupBox("Configuration")
@@ -118,15 +154,15 @@ class DeployTab(QWidget):
         model_label.setFont(QFont("Arial", 9))
         model_layout.addWidget(model_label)
 
-        self.model_path_edit = QLineEdit()
-        self.model_path_edit.setPlaceholderText("Select trained model file (.joblib)")
-        self.model_path_edit.setFont(QFont("Arial", 9))
-        model_layout.addWidget(self.model_path_edit)
+        self.model_combo = QComboBox()
+        self.model_combo.setFont(QFont("Arial", 9))
+        self.model_combo.setEditable(False)
+        model_layout.addWidget(self.model_combo)
 
-        model_browse_btn = QPushButton("Browse...")
-        model_browse_btn.setMaximumWidth(80)
-        model_browse_btn.clicked.connect(self.browse_model)
-        model_layout.addWidget(model_browse_btn)
+        self.model_browse_btn = QPushButton("Browse...")
+        self.model_browse_btn.setMaximumWidth(100)
+        self.model_browse_btn.clicked.connect(self.browse_model)
+        model_layout.addWidget(self.model_browse_btn)
 
         config_layout.addLayout(model_layout)
 
@@ -140,12 +176,13 @@ class DeployTab(QWidget):
         self.param_path_edit = QLineEdit()
         self.param_path_edit.setPlaceholderText("Optional: Load parameter configuration")
         self.param_path_edit.setFont(QFont("Arial", 9))
+        self.param_path_edit.setReadOnly(True)
         param_layout.addWidget(self.param_path_edit)
 
-        param_browse_btn = QPushButton("Browse...")
-        param_browse_btn.setMaximumWidth(80)
-        param_browse_btn.clicked.connect(self.browse_parameters)
-        param_layout.addWidget(param_browse_btn)
+        self.param_browse_btn = QPushButton("Browse...")
+        self.param_browse_btn.setMaximumWidth(100)
+        self.param_browse_btn.clicked.connect(self.browse_parameters)
+        param_layout.addWidget(self.param_browse_btn)
 
         config_layout.addLayout(param_layout)
 
@@ -155,8 +192,8 @@ class DeployTab(QWidget):
         """Processing mode selection (fresh vs incremental)."""
         mode_group = QGroupBox("Processing Mode")
         mode_layout = QVBoxLayout(mode_group)
-        mode_layout.setContentsMargins(10, 10, 10, 10)
-        mode_layout.setSpacing(8)
+        mode_layout.setContentsMargins(10, 5, 10, 5)  # Minimal top/bottom margins
+        mode_layout.setSpacing(2)  # Minimal spacing
 
         self.mode_button_group = QButtonGroup(self)
 
@@ -169,7 +206,10 @@ class DeployTab(QWidget):
         fresh_help = QLabel("   → Extract features, predict, and generate report for all H5 files")
         fresh_help.setFont(QFont("Arial", 8))
         fresh_help.setStyleSheet("color: #6c757d;")
+        fresh_help.setWordWrap(True)
         mode_layout.addWidget(fresh_help)
+
+        mode_layout.addSpacing(6)  # Small gap between options
 
         # Incremental mode
         self.incremental_mode_radio = QRadioButton("Incremental (Process only new files)")
@@ -180,6 +220,7 @@ class DeployTab(QWidget):
         incremental_help = QLabel("   → Process only new H5 files added since last run, update existing report")
         incremental_help.setFont(QFont("Arial", 8))
         incremental_help.setStyleSheet("color: #6c757d;")
+        incremental_help.setWordWrap(True)
         mode_layout.addWidget(incremental_help)
 
         # Default selection
@@ -191,31 +232,7 @@ class DeployTab(QWidget):
         """Processing control buttons."""
         buttons_layout = QHBoxLayout()
 
-        # Full pipeline button
-        self.run_pipeline_btn = QPushButton("🚀 Run Full Pipeline")
-        self.run_pipeline_btn.setFont(QFont("Arial", 10, QFont.Bold))
-        self.run_pipeline_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
-        self.run_pipeline_btn.clicked.connect(self.run_full_pipeline)
-        self.run_pipeline_btn.setEnabled(False)
-        buttons_layout.addWidget(self.run_pipeline_btn)
-
-        buttons_layout.addStretch()
-
-        # Manual step buttons (advanced)
+        # Processing step buttons
         self.step1_btn = QPushButton("1️⃣ Extract Features")
         self.step1_btn.setFont(QFont("Arial", 9))
         self.step1_btn.clicked.connect(self.run_extract_step)
@@ -228,13 +245,37 @@ class DeployTab(QWidget):
         self.step2_btn.setEnabled(False)
         buttons_layout.addWidget(self.step2_btn)
 
-        self.step3_btn = QPushButton("3️⃣ Generate Report")
-        self.step3_btn.setFont(QFont("Arial", 9))
-        self.step3_btn.clicked.connect(self.run_report_step)
-        self.step3_btn.setEnabled(False)
-        buttons_layout.addWidget(self.step3_btn)
+        buttons_layout.addStretch()
 
         parent_layout.addLayout(buttons_layout)
+
+    def create_results_section(self, parent_layout):
+        """Results viewing section."""
+        results_layout = QHBoxLayout()
+
+        results_label = QLabel("View Results:")
+        results_label.setFont(QFont("Arial", 9))
+        results_layout.addWidget(results_label)
+
+        # Open predictions folder button
+        self.open_predictions_btn = QPushButton("📁 Open Predictions Folder")
+        self.open_predictions_btn.setFont(QFont("Arial", 9))
+        self.open_predictions_btn.setToolTip("Open the predictions folder in file explorer")
+        self.open_predictions_btn.clicked.connect(self.open_predictions_folder)
+        self.open_predictions_btn.setEnabled(False)
+        results_layout.addWidget(self.open_predictions_btn)
+
+        # View results summary button
+        self.view_summary_btn = QPushButton("📊 View Results Summary")
+        self.view_summary_btn.setFont(QFont("Arial", 9))
+        self.view_summary_btn.setToolTip("View a summary of HTR counts for each file")
+        self.view_summary_btn.clicked.connect(self.view_results_summary)
+        self.view_summary_btn.setEnabled(False)
+        results_layout.addWidget(self.view_summary_btn)
+
+        results_layout.addStretch()
+
+        parent_layout.addLayout(results_layout)
 
     def create_progress_section(self, parent_layout):
         """Progress tracking and logging."""
@@ -274,13 +315,11 @@ class DeployTab(QWidget):
         """Refresh deployment status display."""
         if not self.project_manager:
             self.status_label.setText("No project loaded. Create or open a project to begin.")
-            self.run_pipeline_btn.setEnabled(False)
             return
 
         project_path, project_config = self.project_manager.get_current_project()
         if not project_path:
             self.status_label.setText("No project loaded. Create or open a project to begin.")
-            self.run_pipeline_btn.setEnabled(False)
             return
 
         # Initialize workflow tracker
@@ -293,6 +332,9 @@ class DeployTab(QWidget):
 
         # Update status label
         self.status_label.setText(message)
+
+        # Auto-detect and load existing models and parameters
+        self._auto_load_models_and_params(project_path)
 
         # Update file counts
         h5_total = status['h5_files']['total']
@@ -314,22 +356,105 @@ class DeployTab(QWidget):
             self.incremental_mode_radio.setChecked(True)
 
         # Enable/disable buttons
-        model_path = self.model_path_edit.text().strip()
+        model_path = self._get_selected_model_path()
         has_model = bool(model_path and os.path.exists(model_path))
 
+        # Input data buttons
+        self.add_h5_btn.setEnabled(bool(project_path))
+        self.open_input_btn.setEnabled(bool(project_path))
+
+        # Processing buttons
         if h5_total > 0 and has_model:
-            self.run_pipeline_btn.setEnabled(True)
             self.step1_btn.setEnabled(True)
             self.step2_btn.setEnabled(features_total > 0)
-            self.step3_btn.setEnabled(predictions_total > 0)
         else:
-            self.run_pipeline_btn.setEnabled(False)
             self.step1_btn.setEnabled(False)
             self.step2_btn.setEnabled(False)
-            self.step3_btn.setEnabled(False)
+
+        # Results viewing buttons
+        self.open_predictions_btn.setEnabled(predictions_total > 0)
+        self.view_summary_btn.setEnabled(predictions_total > 0)
+
+    def _get_selected_model_path(self):
+        """Get the currently selected model path from combo box."""
+        current_data = self.model_combo.currentData()
+        return current_data if current_data else ""
+
+    def _auto_load_models_and_params(self, project_path):
+        """Auto-detect and load existing models and parameters from project folders."""
+        if not project_path:
+            self.model_combo.clear()
+            self.model_combo.addItem("No model selected", "")
+            self.param_path_edit.clear()
+            self.model_browse_btn.setText("Browse...")
+            self.param_browse_btn.setText("Browse...")
+            return
+
+        # Auto-load models
+        models_folder = os.path.join(project_path, "models")
+        model_files = []
+        if os.path.exists(models_folder):
+            model_files = sorted(
+                glob.glob(os.path.join(models_folder, "*.joblib")),
+                key=os.path.getmtime,
+                reverse=True  # Most recent first
+            )
+
+        self.model_combo.clear()
+        if model_files:
+            # Add all found models to dropdown
+            for model_file in model_files:
+                filename = os.path.basename(model_file)
+                # Add checkmark prefix to show it's from project
+                self.model_combo.addItem(f"✓ {filename}", model_file)
+
+            # Update button text to "Replace..."
+            self.model_browse_btn.setText("Replace...")
+            self.show_progress(f"✓ Auto-loaded {len(model_files)} model(s) from project")
+        else:
+            self.model_combo.addItem("No model selected", "")
+            self.model_browse_btn.setText("Browse...")
+
+        # Auto-load most recent parameter file
+        params_folder = os.path.join(project_path, "parameters")
+        param_files = []
+        if os.path.exists(params_folder):
+            param_files = sorted(
+                glob.glob(os.path.join(params_folder, "*.json")),
+                key=os.path.getmtime,
+                reverse=True  # Most recent first
+            )
+
+        if param_files:
+            # Use most recent parameter file
+            most_recent_param = param_files[0]
+            filename = os.path.basename(most_recent_param)
+            # Add checkmark prefix
+            self.param_path_edit.setText(f"✓ {filename}")
+            self.param_path_edit.setProperty("full_path", most_recent_param)
+            self.param_path_edit.setStyleSheet("QLineEdit { background-color: #e8f5e9; }")
+            self.param_browse_btn.setText("Replace...")
+            self.show_progress(f"✓ Auto-loaded parameter file: {filename}")
+        else:
+            self.param_path_edit.clear()
+            self.param_path_edit.setProperty("full_path", "")
+            self.param_path_edit.setStyleSheet("")
+            self.param_browse_btn.setText("Browse...")
 
     def browse_model(self):
-        """Browse for model file."""
+        """Browse for model file and copy to project."""
+        # Check if we're replacing an existing model
+        current_model = self._get_selected_model_path()
+        if current_model:
+            reply = QMessageBox.question(
+                self,
+                "Replace Model",
+                "Replace the current model with a different one?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Model File",
@@ -337,11 +462,61 @@ class DeployTab(QWidget):
             "Model Files (*.joblib);;All Files (*)"
         )
         if file_path:
-            self.model_path_edit.setText(file_path)
-            self.refresh_status()
+            # Copy model to project/models/ folder
+            if self.project_manager:
+                project_path, _ = self.project_manager.get_current_project()
+                if project_path:
+                    models_folder = os.path.join(project_path, "models")
+                    os.makedirs(models_folder, exist_ok=True)
+
+                    # Copy file to models folder
+                    filename = os.path.basename(file_path)
+                    dest_path = os.path.join(models_folder, filename)
+
+                    # Check if file already exists in project
+                    if os.path.exists(dest_path) and os.path.samefile(file_path, dest_path):
+                        QMessageBox.information(
+                            self,
+                            "Model Already in Project",
+                            f"{filename} is already in this project.\n\nNo need to copy."
+                        )
+                        return
+
+                    try:
+                        shutil.copy2(file_path, dest_path)
+                        self.show_progress(f"✓ Model copied to project: {filename}")
+                        QMessageBox.information(
+                            self,
+                            "Model Added",
+                            f"Model file copied to project:\n{filename}"
+                        )
+                        # Refresh to update dropdown
+                        self.refresh_status()
+                    except Exception as e:
+                        QMessageBox.warning(
+                            self,
+                            "Copy Failed",
+                            f"Could not copy model to project:\n{str(e)}"
+                        )
+                else:
+                    QMessageBox.warning(self, "Error", "No project loaded.")
+            else:
+                QMessageBox.warning(self, "Error", "No project loaded.")
 
     def browse_parameters(self):
-        """Browse for parameter file."""
+        """Browse for parameter file and copy to project."""
+        # Check if we're replacing existing parameters
+        current_param = self.param_path_edit.property("full_path")
+        if current_param:
+            reply = QMessageBox.question(
+                self,
+                "Replace Parameters",
+                "Replace the current parameter file with a different one?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Parameter File",
@@ -349,7 +524,46 @@ class DeployTab(QWidget):
             "JSON Files (*.json);;All Files (*)"
         )
         if file_path:
-            self.param_path_edit.setText(file_path)
+            # Copy parameters to project/parameters/ folder
+            if self.project_manager:
+                project_path, _ = self.project_manager.get_current_project()
+                if project_path:
+                    params_folder = os.path.join(project_path, "parameters")
+                    os.makedirs(params_folder, exist_ok=True)
+
+                    # Copy file to parameters folder
+                    filename = os.path.basename(file_path)
+                    dest_path = os.path.join(params_folder, filename)
+
+                    # Check if file already exists in project
+                    if os.path.exists(dest_path) and os.path.samefile(file_path, dest_path):
+                        QMessageBox.information(
+                            self,
+                            "Parameters Already in Project",
+                            f"{filename} is already in this project.\n\nNo need to copy."
+                        )
+                        return
+
+                    try:
+                        shutil.copy2(file_path, dest_path)
+                        self.show_progress(f"✓ Parameters copied to project: {filename}")
+                        QMessageBox.information(
+                            self,
+                            "Parameters Added",
+                            f"Parameter file copied to project:\n{filename}"
+                        )
+                        # Refresh to update display
+                        self.refresh_status()
+                    except Exception as e:
+                        QMessageBox.warning(
+                            self,
+                            "Copy Failed",
+                            f"Could not copy parameters to project:\n{str(e)}"
+                        )
+                else:
+                    QMessageBox.warning(self, "Error", "No project loaded.")
+            else:
+                QMessageBox.warning(self, "Error", "No project loaded.")
 
     def run_full_pipeline(self):
         """Run the complete 3-step pipeline."""
@@ -488,7 +702,7 @@ class DeployTab(QWidget):
             return False
 
         if require_model:
-            model_path = self.model_path_edit.text().strip()
+            model_path = self._get_selected_model_path()
             if not model_path:
                 QMessageBox.warning(self, "Error", "Please select a trained model file.")
                 return False
@@ -513,7 +727,7 @@ class DeployTab(QWidget):
             config_manager = get_config_manager()
 
             # Load custom parameters if provided
-            param_path = self.param_path_edit.text().strip()
+            param_path = self.param_path_edit.property("full_path")
             if param_path and os.path.exists(param_path):
                 config_manager.import_parameters(param_path)
                 self.show_progress(f"Using custom parameters: {os.path.basename(param_path)}")
@@ -592,7 +806,7 @@ class DeployTab(QWidget):
             os.makedirs(predictions_folder, exist_ok=True)
 
             # Load model
-            model_path = self.model_path_edit.text().strip()
+            model_path = self._get_selected_model_path()
             predictor = HTRPredictor()
 
             self.show_progress(f"Loading model: {os.path.basename(model_path)}")
@@ -680,6 +894,473 @@ class DeployTab(QWidget):
             self.show_progress(f"❌ Error: {str(e)}")
             QMessageBox.critical(self, "Error", f"Report generation failed:\n{str(e)}")
             return False
+
+    def add_h5_files(self):
+        """Browse and add H5 files to project input folder."""
+        if not self.project_manager:
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        # Browse for H5 files (allow multiple selection)
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select H5 Files to Add",
+            "",
+            "H5 Files (*.h5);;All Files (*)"
+        )
+
+        if not file_paths:
+            return
+
+        # Copy files to input folder
+        input_folder = os.path.join(project_path, "input")
+        os.makedirs(input_folder, exist_ok=True)
+
+        files_copied = 0
+        files_skipped = 0
+
+        for file_path in file_paths:
+            filename = os.path.basename(file_path)
+            dest_path = os.path.join(input_folder, filename)
+
+            # Check if file already exists
+            if os.path.exists(dest_path):
+                reply = QMessageBox.question(
+                    self,
+                    "File Exists",
+                    f"{filename} already exists in project.\n\nOverwrite?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
+                    files_skipped += 1
+                    continue
+
+            try:
+                shutil.copy2(file_path, dest_path)
+                files_copied += 1
+                self.show_progress(f"✓ Added: {filename}")
+            except Exception as e:
+                QMessageBox.warning(
+                    self,
+                    "Copy Failed",
+                    f"Could not copy {filename}:\n{str(e)}"
+                )
+
+        # Show summary
+        summary_msg = f"Added {files_copied} H5 file(s) to project"
+        if files_skipped > 0:
+            summary_msg += f"\n{files_skipped} file(s) skipped"
+
+        QMessageBox.information(self, "Files Added", summary_msg)
+
+        # Refresh status to show new files
+        self.refresh_status()
+
+    def open_input_folder(self):
+        """Open the project input folder in file explorer."""
+        if not self.project_manager:
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        input_folder = os.path.join(project_path, "input")
+        os.makedirs(input_folder, exist_ok=True)
+
+        # Open folder in file explorer (cross-platform)
+        try:
+            if sys.platform == 'win32':
+                os.startfile(input_folder)
+            elif sys.platform == 'darwin':  # macOS
+                subprocess.Popen(['open', input_folder])
+            else:  # Linux
+                subprocess.Popen(['xdg-open', input_folder])
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not open folder:\n{str(e)}"
+            )
+
+    def open_predictions_folder(self):
+        """Open the project predictions folder in file explorer."""
+        if not self.project_manager:
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        predictions_folder = os.path.join(project_path, "predictions")
+
+        if not os.path.exists(predictions_folder):
+            QMessageBox.warning(
+                self,
+                "Folder Not Found",
+                "Predictions folder does not exist yet.\n\nRun predictions first."
+            )
+            return
+
+        # Open folder in file explorer (cross-platform)
+        try:
+            if sys.platform == 'win32':
+                os.startfile(predictions_folder)
+            elif sys.platform == 'darwin':  # macOS
+                subprocess.Popen(['open', predictions_folder])
+            else:  # Linux
+                subprocess.Popen(['xdg-open', predictions_folder])
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not open folder:\n{str(e)}"
+            )
+
+    def view_results_summary(self):
+        """View a summary of HTR predictions."""
+        if not self.project_manager:
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        predictions_folder = os.path.join(project_path, "predictions")
+
+        if not os.path.exists(predictions_folder):
+            QMessageBox.warning(
+                self,
+                "No Predictions",
+                "No predictions found.\n\nRun HTR prediction first."
+            )
+            return
+
+        # Load all prediction files and summarize
+        # Try multiple patterns to find prediction files
+        prediction_files = glob.glob(os.path.join(predictions_folder, "*_predictions.csv"))
+        if not prediction_files:
+            # Try looking for any CSV files in predictions folder
+            prediction_files = glob.glob(os.path.join(predictions_folder, "*.csv"))
+
+        if not prediction_files:
+            # Check if folder is empty
+            all_files = os.listdir(predictions_folder) if os.path.exists(predictions_folder) else []
+            QMessageBox.warning(
+                self,
+                "No Predictions",
+                f"No prediction CSV files found in:\n{predictions_folder}\n\nFiles in folder: {len(all_files)}"
+            )
+            return
+
+        # Create summary dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("HTR Results Summary")
+        dialog.setMinimumSize(500, 400)
+
+        layout = QVBoxLayout(dialog)
+
+        # Info label
+        info_label = QLabel(f"Summary of HTR predictions for {len(prediction_files)} file(s):")
+        info_label.setFont(QFont("Arial", 10))
+        layout.addWidget(info_label)
+
+        # Instruction label
+        instruction_label = QLabel("Click on any file to view individual HTR events")
+        instruction_label.setFont(QFont("Arial", 9))
+        instruction_label.setStyleSheet("color: #6c757d; font-style: italic; margin-bottom: 5px;")
+        layout.addWidget(instruction_label)
+
+        # Create simplified table
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["File", "HTR Count"])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        table.setFont(QFont("Arial", 9))
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setSelectionMode(QTableWidget.SingleSelection)
+
+        # Load and process each file
+        summary_data = []
+        total_htrs_all = 0
+
+        for pred_file in sorted(prediction_files):
+            try:
+                df = pd.read_csv(pred_file)
+                filename = os.path.basename(pred_file).replace("_predictions.csv", "")
+                htr_events = len(df[df['prediction'] == 1])
+
+                summary_data.append({
+                    'file': filename,
+                    'htrs': htr_events,
+                    'pred_file': pred_file  # Store full path for detail view
+                })
+
+                total_htrs_all += htr_events
+
+            except Exception as e:
+                print(f"Error reading {pred_file}: {e}")
+
+        # Populate table
+        table.setRowCount(len(summary_data) + 1)  # +1 for totals row
+
+        for row, data in enumerate(summary_data):
+            table.setItem(row, 0, QTableWidgetItem(data['file']))
+            table.setItem(row, 1, QTableWidgetItem(str(data['htrs'])))
+
+        # Add totals row
+        totals_row = len(summary_data)
+
+        total_item = QTableWidgetItem("TOTAL")
+        total_item.setFont(QFont("Arial", 9, QFont.Bold))
+        table.setItem(totals_row, 0, total_item)
+
+        total_htrs_item = QTableWidgetItem(str(total_htrs_all))
+        total_htrs_item.setFont(QFont("Arial", 9, QFont.Bold))
+        table.setItem(totals_row, 1, total_htrs_item)
+
+        # Connect row click to detail view
+        def on_row_clicked(row, column):
+            # Don't open detail for totals row
+            if row < len(summary_data):
+                self.show_htr_detail(summary_data[row]['pred_file'], summary_data[row]['file'])
+
+        table.cellClicked.connect(on_row_clicked)
+
+        layout.addWidget(table)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        export_csv_btn = QPushButton("📄 Export to CSV")
+        export_csv_btn.clicked.connect(lambda: self.export_results_to_csv(summary_data))
+        button_layout.addWidget(export_csv_btn)
+
+        open_folder_btn = QPushButton("Open Predictions Folder")
+        open_folder_btn.clicked.connect(lambda: self.open_predictions_folder())
+        button_layout.addWidget(open_folder_btn)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_btn)
+
+        layout.addLayout(button_layout)
+
+        dialog.exec()
+
+    def export_results_to_csv(self, summary_data):
+        """Export HTR results to wide-format CSV file."""
+        if not self.project_manager:
+            return
+
+        project_path, project_config = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        try:
+            # Get FPS from config
+            fps = 160  # Default
+            try:
+                sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from core.config import get_config_manager
+                config_manager = get_config_manager()
+                fps = config_manager.config.default_fps
+            except Exception as e:
+                print(f"Could not load config, using default FPS: {e}")
+
+            # Load all prediction data
+            all_htr_data = {}
+
+            for data in summary_data:
+                filename = data['file']
+                pred_file = data['pred_file']
+
+                try:
+                    df = pd.read_csv(pred_file)
+                    # Filter to only HTR events
+                    htr_df = df[df['prediction'] == 1].copy()
+
+                    if len(htr_df) > 0:
+                        # Extract start frames
+                        frames = htr_df['start_frame'].tolist()
+
+                        # Convert frames to timestamps (hh:mm:ss)
+                        timestamps = []
+                        for frame in frames:
+                            total_seconds = frame / fps
+                            hours = int(total_seconds // 3600)
+                            minutes = int((total_seconds % 3600) // 60)
+                            seconds = int(total_seconds % 60)
+                            time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                            timestamps.append(time_str)
+
+                        all_htr_data[filename] = {
+                            'frames': frames,
+                            'timestamps': timestamps
+                        }
+                except Exception as e:
+                    print(f"Error reading {pred_file}: {e}")
+                    continue
+
+            if not all_htr_data:
+                QMessageBox.warning(
+                    self,
+                    "No Data",
+                    "No HTR events found to export."
+                )
+                return
+
+            # Create wide-format DataFrame
+            # Find maximum number of HTRs across all files
+            max_htrs = max(len(data['frames']) for data in all_htr_data.values())
+
+            # Build the DataFrame columns
+            export_data = {}
+
+            for filename in sorted(all_htr_data.keys()):
+                data = all_htr_data[filename]
+                frames = data['frames']
+                timestamps = data['timestamps']
+
+                # Pad with empty values to match max_htrs
+                frames_padded = frames + [''] * (max_htrs - len(frames))
+                timestamps_padded = timestamps + [''] * (max_htrs - len(timestamps))
+
+                # Add columns for this file
+                export_data[f'{filename}_Frame'] = frames_padded
+                export_data[f'{filename}_Timestamp'] = timestamps_padded
+
+            # Create DataFrame
+            export_df = pd.DataFrame(export_data)
+
+            # Generate filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            project_name = project_config.get("project_name", "HTR_Analysis")
+
+            # Save to reports folder
+            reports_folder = os.path.join(project_path, "reports")
+            os.makedirs(reports_folder, exist_ok=True)
+
+            csv_filename = f"{project_name}_HTR_Summary_{timestamp}.csv"
+            csv_path = os.path.join(reports_folder, csv_filename)
+
+            # Export to CSV
+            export_df.to_csv(csv_path, index=False)
+
+            self.show_progress(f"✓ Exported HTR summary to: {csv_filename}")
+
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"HTR summary exported successfully!\n\n"
+                f"File: {csv_filename}\n"
+                f"Location: {reports_folder}\n\n"
+                f"Total videos: {len(all_htr_data)}\n"
+                f"Total HTR events: {sum(len(data['frames']) for data in all_htr_data.values())}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Could not export HTR summary:\n{str(e)}"
+            )
+
+    def show_htr_detail(self, pred_file_path, filename):
+        """Show detailed HTR events for a specific file."""
+        try:
+            # Load prediction file
+            df = pd.read_csv(pred_file_path)
+
+            # Filter to only HTR events
+            htr_df = df[df['prediction'] == 1].copy()
+
+            if len(htr_df) == 0:
+                QMessageBox.information(
+                    self,
+                    "No HTR Events",
+                    f"No HTR events found in {filename}"
+                )
+                return
+
+            # Get FPS from config
+            fps = 160  # Default
+            try:
+                sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from core.config import get_config_manager
+                config_manager = get_config_manager()
+                fps = config_manager.config.default_fps
+            except Exception as e:
+                print(f"Could not load config, using default FPS: {e}")
+
+            # Create detail dialog
+            detail_dialog = QDialog(self)
+            detail_dialog.setWindowTitle(f"HTR Events: {filename}")
+            detail_dialog.setMinimumSize(700, 500)
+
+            layout = QVBoxLayout(detail_dialog)
+
+            # Header info
+            header_label = QLabel(f"<b>{filename}</b> - {len(htr_df)} HTR event(s) detected (FPS: {fps})")
+            header_label.setFont(QFont("Arial", 10))
+            layout.addWidget(header_label)
+
+            # Create detail table
+            detail_table = QTableWidget()
+            detail_table.setColumnCount(3)
+            detail_table.setHorizontalHeaderLabels(["Event #", "Start Frame", "Start Time (hh:mm:ss)"])
+            detail_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            detail_table.setFont(QFont("Arial", 9))
+            detail_table.setAlternatingRowColors(True)
+
+            # Populate detail table
+            detail_table.setRowCount(len(htr_df))
+
+            for idx, (_, row) in enumerate(htr_df.iterrows()):
+                # Event number
+                detail_table.setItem(idx, 0, QTableWidgetItem(str(idx + 1)))
+
+                # Start frame
+                start_frame = int(row['start_frame']) if 'start_frame' in row else 0
+                detail_table.setItem(idx, 1, QTableWidgetItem(str(start_frame)))
+
+                # Start time (convert frame to hh:mm:ss)
+                total_seconds = start_frame / fps
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                seconds = int(total_seconds % 60)
+                time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                detail_table.setItem(idx, 2, QTableWidgetItem(time_str))
+
+            layout.addWidget(detail_table)
+
+            # Buttons
+            button_layout = QHBoxLayout()
+            button_layout.addStretch()
+
+            close_btn = QPushButton("Close")
+            close_btn.clicked.connect(detail_dialog.accept)
+            button_layout.addWidget(close_btn)
+
+            layout.addLayout(button_layout)
+
+            detail_dialog.exec()
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Could not load HTR details:\n{str(e)}"
+            )
 
     def show_progress(self, message):
         """Show progress message."""
