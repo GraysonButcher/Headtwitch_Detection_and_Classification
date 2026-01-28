@@ -60,6 +60,48 @@ except ImportError:
     from diagnostics_graph_widget import DiagnosticsGraphWidget
 
 
+class CachedDataLoader:
+    """
+    Lightweight data loader that wraps already-loaded tracking data.
+
+    Provides the same interface as SleapDataLoader but uses cached data
+    from VideoInspectorWidget instead of reloading from disk.
+    """
+
+    def __init__(self, tracking_data, point_scores, node_names=None):
+        """
+        Initialize with pre-loaded data.
+
+        Args:
+            tracking_data: Array of shape (n_frames, n_nodes, 2)
+            point_scores: Array of shape (n_frames, n_nodes)
+            node_names: Optional list of node names
+        """
+        import numpy as np
+
+        # Add instance dimension to match SleapDataLoader format
+        # SleapDataLoader.locations is (n_frames, n_nodes, 2, n_instances)
+        self.locations = tracking_data[:, :, :, np.newaxis]
+
+        # SleapDataLoader.point_scores is (n_frames, n_nodes, n_instances)
+        self.point_scores = point_scores[:, :, np.newaxis]
+
+        self.node_names = node_names
+        self.total_frames = tracking_data.shape[0]
+
+    def get_node_positions(self, node_idx, start_frame=0, end_frame=None, instance=0):
+        """Get positions for a specific node across frames."""
+        if end_frame is None:
+            end_frame = self.total_frames
+        return self.locations[start_frame:end_frame, node_idx, :, instance]
+
+    def get_node_scores(self, node_idx, start_frame=0, end_frame=None, instance=0):
+        """Get confidence scores for a specific node across frames."""
+        if end_frame is None:
+            end_frame = self.total_frames
+        return self.point_scores[start_frame:end_frame, node_idx, instance]
+
+
 class HTRAnalysisAppV3(QMainWindow):
     """Main application window with 5-tab workflow structure."""
 
@@ -67,6 +109,7 @@ class HTRAnalysisAppV3(QMainWindow):
         super().__init__()
         self.config_manager = get_config_manager()
         self.project_manager = None
+        self.cached_data_loader = None  # Cached data loader for fast reanalysis
         self.init_ui()
 
     def init_ui(self):
@@ -554,12 +597,22 @@ class HTRAnalysisAppV3(QMainWindow):
     # ==================== Parameter Tuning Functions ====================
 
     def on_h5_loaded(self, signals_df):
-        """Handle H5 file loaded event - enable analysis buttons."""
+        """Handle H5 file loaded event - enable analysis buttons and cache data loader."""
         if self.parameter_panel:
             self.parameter_panel.enable_analysis_buttons(True)
 
+        # Create cached data loader from video inspector's already-loaded data
+        if self.video_inspector and self.video_inspector.tracking_data is not None:
+            self.cached_data_loader = CachedDataLoader(
+                tracking_data=self.video_inspector.tracking_data,
+                point_scores=self.video_inspector.point_scores,
+                node_names=None  # Node names not needed for detection
+            )
+
     def reanalyze_current_view(self):
         """Run detection on the visible graph range."""
+        import time
+
         if not self.video_inspector or not self.video_inspector.signals_df is not None:
             QMessageBox.warning(self, "No Data", "Please load an H5 file first.")
             return
@@ -569,21 +622,32 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Get visible range from graph
         start, end = self.diagnostics_graph.get_view_range()
+        print(f"[DEBUG] Reanalyzing frames {start}-{end} ({end-start} frames)")
+        print(f"[DEBUG] Cached data loader: {'YES' if self.cached_data_loader else 'NO'}")
 
         # Run detection on this range
         try:
+            t0 = time.time()
             events_df = self.run_detection_on_range(start, end)
+            elapsed = time.time() - t0
+            print(f"[DEBUG] Detection completed in {elapsed:.2f}s, found {len(events_df)} events")
 
             # Update graph overlays
             self.diagnostics_graph.update_events(events_df)
+
+            # Update peak markers with current parameters
+            self._update_peak_markers()
+            print(f"[DEBUG] Graph updated")
 
             # Update status
             if self.parameter_panel:
                 self.parameter_panel.status_label.setText(
                     f"Analysis complete: {len(events_df)} events detected in frames {start}-{end}"
                 )
+                print(f"[DEBUG] Status label updated")
 
         except Exception as e:
+            print(f"[DEBUG] ERROR: {e}")
             QMessageBox.critical(
                 self,
                 "Detection Error",
@@ -617,6 +681,8 @@ class HTRAnalysisAppV3(QMainWindow):
             # Update graph overlays
             if self.diagnostics_graph:
                 self.diagnostics_graph.update_events(events_df)
+                # Update peak markers with current parameters
+                self._update_peak_markers()
 
             progress.setValue(100)
             progress.close()
@@ -647,7 +713,7 @@ class HTRAnalysisAppV3(QMainWindow):
         """
         Run HTR detection on specified frame range using current parameters.
 
-        Uses the full detector classes from core.detectors for accurate results.
+        Uses cached data loader for fast reanalysis (no H5 reload).
 
         Args:
             start_frame: Starting frame index
@@ -662,7 +728,6 @@ class HTRAnalysisAppV3(QMainWindow):
         try:
             sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             from core.detectors import CombinedDetector
-            from core.data_processing import SleapDataLoader
             from core.config import NodeMapping
         except ImportError as e:
             raise ImportError(f"Could not import detection modules: {e}")
@@ -673,16 +738,9 @@ class HTRAnalysisAppV3(QMainWindow):
 
         config = self.config_manager.config
 
-        # Get H5 path from video inspector
-        if not self.video_inspector or not self.video_inspector.h5_path:
-            raise ValueError("No H5 file loaded")
-
-        h5_path = self.video_inspector.h5_path
-
-        # Create SleapDataLoader
-        data_loader = SleapDataLoader(h5_path)
-        if not data_loader.load_data():
-            raise ValueError("Failed to load H5 data")
+        # Use cached data loader (fast) instead of reloading from disk
+        if not self.cached_data_loader:
+            raise ValueError("No H5 data loaded. Please load an H5 file first.")
 
         # Create NodeMapping from video inspector's mapping
         node_mapping = NodeMapping(
@@ -693,9 +751,9 @@ class HTRAnalysisAppV3(QMainWindow):
             head=self.video_inspector.node_mapping['head']
         )
 
-        # Create combined detector
+        # Create combined detector using cached data
         combined_detector = CombinedDetector(
-            data_loader=data_loader,
+            data_loader=self.cached_data_loader,
             ear_config=config.ear_detector,
             head_config=config.head_detector,
             node_mapping=node_mapping
@@ -714,6 +772,51 @@ class HTRAnalysisAppV3(QMainWindow):
             return pd.DataFrame(combined_events)
         else:
             return pd.DataFrame(columns=['start_frame', 'end_frame', 'confidence', 'detection_method'])
+
+    def _update_peak_markers(self):
+        """
+        Update peak/valley markers on the diagnostics graph with current parameters.
+
+        Parameters are mapped to match the actual detector logic in core/detectors.py:
+        - EarsDetector uses height (peak_threshold, valley_threshold) and distance (max_gap)
+        - HeadDetector uses prominence (peak_prominence), distance (peak_distance),
+          and amplitude_threshold for cycle filtering
+        - Oscillation grouping uses max_cycle_gap, min_oscillations, between_unit_gap, etc.
+        """
+        if not self.diagnostics_graph or not self.config_manager:
+            return
+
+        config = self.config_manager.config
+
+        # Head detector params - uses prominence, distance, amplitude threshold, and grouping params
+        head_prominence = config.head_detector.peak_prominence
+        head_distance = config.head_detector.peak_distance
+        head_amplitude_threshold = config.head_detector.amplitude_threshold
+        head_max_cycle_gap = config.head_detector.max_cycle_gap
+        head_min_oscillations = config.head_detector.min_oscillations
+
+        # Ear detector params - uses height thresholds, max_gap, and grouping params
+        ear_peak_height = config.ear_detector.peak_threshold
+        ear_valley_height = config.ear_detector.valley_threshold
+        ear_distance = config.ear_detector.max_gap
+        ear_quick_gap = config.ear_detector.quick_gap
+        ear_between_unit_gap = config.ear_detector.between_unit_gap
+        ear_min_crisscrosses = config.ear_detector.min_crisscrosses
+
+        # Update peaks/valleys on the graph
+        self.diagnostics_graph.update_peaks(
+            head_prominence=head_prominence,
+            head_distance=head_distance,
+            head_amplitude_threshold=head_amplitude_threshold,
+            head_max_cycle_gap=head_max_cycle_gap,
+            head_min_oscillations=head_min_oscillations,
+            ear_peak_height=ear_peak_height,
+            ear_valley_height=ear_valley_height,
+            ear_distance=ear_distance,
+            ear_quick_gap=ear_quick_gap,
+            ear_between_unit_gap=ear_between_unit_gap,
+            ear_min_crisscrosses=ear_min_crisscrosses
+        )
 
     # ==================== Training Functions ====================
 
