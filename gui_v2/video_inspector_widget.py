@@ -24,6 +24,7 @@ from .detection_utils import (
     normalize_sleap_tracks,
     normalize_sleap_scores
 )
+from core.config import get_config_manager
 
 
 class VideoInspectorWidget(QWidget):
@@ -238,6 +239,15 @@ class VideoInspectorWidget(QWidget):
 
             # Get configured mapping
             self.node_mapping = dialog.get_mapping()
+
+            # Sync node mapping to config manager so other tabs use the same mapping
+            config_manager = get_config_manager()
+            config_manager.config.node_mapping.left_ear = self.node_mapping['left_ear']
+            config_manager.config.node_mapping.right_ear = self.node_mapping['right_ear']
+            config_manager.config.node_mapping.back = self.node_mapping['back']
+            config_manager.config.node_mapping.nose = self.node_mapping['nose']
+            config_manager.config.node_mapping.head = self.node_mapping['head']
+            config_manager.save_config()  # Persist to disk
 
             # Load H5 data and calculate signals
             self.h5_path = file_path

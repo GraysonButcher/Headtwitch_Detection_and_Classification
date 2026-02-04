@@ -788,14 +788,19 @@ class HTRAnalysisAppV3(QMainWindow):
 
         config = self.config_manager.config
 
-        # Head detector params - uses prominence, distance, amplitude threshold, and grouping params
+        # Head detector params - uses prominence, distance, amplitude threshold, grouping, and smoothing params
         head_prominence = config.head_detector.peak_prominence
         head_distance = config.head_detector.peak_distance
         head_amplitude_threshold = config.head_detector.amplitude_threshold
         head_max_cycle_gap = config.head_detector.max_cycle_gap
         head_min_oscillations = config.head_detector.min_oscillations
+        head_use_smoothing = config.head_detector.use_smoothing
+        head_smoothing_window = config.head_detector.smoothing_window
+        head_smoothing_polyorder = config.head_detector.smoothing_polyorder
 
-        # Ear detector params - uses height thresholds, max_gap, and grouping params
+        # Ear detector params - mode selection and thresholds
+        ear_use_prominence_mode = config.ear_detector.use_prominence_mode
+        ear_prominence = config.ear_detector.ear_prominence
         ear_peak_height = config.ear_detector.peak_threshold
         ear_valley_height = config.ear_detector.valley_threshold
         ear_distance = config.ear_detector.max_gap
@@ -810,6 +815,11 @@ class HTRAnalysisAppV3(QMainWindow):
             head_amplitude_threshold=head_amplitude_threshold,
             head_max_cycle_gap=head_max_cycle_gap,
             head_min_oscillations=head_min_oscillations,
+            head_use_smoothing=head_use_smoothing,
+            head_smoothing_window=head_smoothing_window,
+            head_smoothing_polyorder=head_smoothing_polyorder,
+            ear_use_prominence_mode=ear_use_prominence_mode,
+            ear_prominence=ear_prominence,
             ear_peak_height=ear_peak_height,
             ear_valley_height=ear_valley_height,
             ear_distance=ear_distance,
@@ -1063,8 +1073,12 @@ class HTRAnalysisAppV3(QMainWindow):
             # Load the data
             df = pd.read_csv(csv_path)
 
-            # Split features and labels (same split as training)
-            feature_cols = [col for col in df.columns if col not in ['ground_truth', 'rat_id', 'start_frame', 'end_frame']]
+            # Split features and labels (same split as training, exclude metadata columns)
+            metadata_cols = [
+                'ground_truth', 'rat_id', 'dose', 'drug', 'cohort', 'source_file',
+                'start_frame', 'end_frame', 'prediction', 'prediction_confidence'
+            ]
+            feature_cols = [col for col in df.columns if col not in metadata_cols]
             X = df[feature_cols]
             y = df['ground_truth']
 

@@ -20,6 +20,7 @@ from PySide6.QtGui import QFont
 try:
     from .csv_editor_widget import CSVEditorWidget
     from .workflow_tracker import WorkflowTracker
+    from .metadata_config_dialog import MetadataConfigDialog
 except ImportError:
     # Fallback for direct execution
     import sys
@@ -28,6 +29,7 @@ except ImportError:
     sys.path.insert(0, current_dir)
     from csv_editor_widget import CSVEditorWidget
     from workflow_tracker import WorkflowTracker
+    from metadata_config_dialog import MetadataConfigDialog
 
 
 class PrepareDataTab(QWidget):
@@ -131,6 +133,24 @@ class PrepareDataTab(QWidget):
 
         features_layout.addLayout(options_layout)
 
+        # Second row: Combine and Open folder buttons
+        utils_layout = QHBoxLayout()
+
+        self.combine_features_btn = QPushButton("📑 Combine All Features")
+        self.combine_features_btn.setFont(QFont("Arial", 9))
+        self.combine_features_btn.setToolTip("Combine all feature CSVs into a single master file")
+        self.combine_features_btn.clicked.connect(self.combine_all_features)
+        self.combine_features_btn.setEnabled(False)
+        utils_layout.addWidget(self.combine_features_btn)
+
+        self.open_features_btn = QPushButton("📂 Open Features Folder")
+        self.open_features_btn.setFont(QFont("Arial", 9))
+        self.open_features_btn.clicked.connect(self.open_features_folder)
+        self.open_features_btn.setEnabled(False)
+        utils_layout.addWidget(self.open_features_btn)
+
+        features_layout.addLayout(utils_layout)
+
         # Progress
         self.features_progress_text = QTextEdit()
         self.features_progress_text.setMaximumHeight(80)
@@ -202,6 +222,8 @@ class PrepareDataTab(QWidget):
             self.features_status_label.setText("No project loaded. Create or open a project to begin.")
             self.extract_all_btn.setEnabled(False)
             self.extract_new_btn.setEnabled(False)
+            self.combine_features_btn.setEnabled(False)
+            self.open_features_btn.setEnabled(False)
             return
 
         project_path, project_config = self.project_manager.get_current_project()
@@ -209,6 +231,8 @@ class PrepareDataTab(QWidget):
             self.features_status_label.setText("No project loaded. Create or open a project to begin.")
             self.extract_all_btn.setEnabled(False)
             self.extract_new_btn.setEnabled(False)
+            self.combine_features_btn.setEnabled(False)
+            self.open_features_btn.setEnabled(False)
             return
 
         # Initialize workflow tracker
@@ -224,6 +248,7 @@ class PrepareDataTab(QWidget):
         # Enable/disable buttons based on status
         h5_total = status['h5_files']['total']
         h5_new = status['h5_files']['new']
+        features_total = status['features']['total']
 
         if h5_total > 0:
             self.extract_all_btn.setEnabled(True)
@@ -234,6 +259,14 @@ class PrepareDataTab(QWidget):
         else:
             self.extract_new_btn.setEnabled(False)
             self.extract_new_btn.setText("🆕 Extract New Files Only")
+
+        # Enable combine/open buttons if features exist
+        if features_total > 0:
+            self.combine_features_btn.setEnabled(True)
+            self.open_features_btn.setEnabled(True)
+        else:
+            self.combine_features_btn.setEnabled(False)
+            self.open_features_btn.setEnabled(False)
 
     def browse_parameters(self):
         """Browse for parameter configuration file."""
@@ -296,34 +329,51 @@ class PrepareDataTab(QWidget):
         if reply != QMessageBox.Yes:
             return
 
+        # Set up paths
+        input_folder = os.path.join(project_path, "input")
+        output_folder = os.path.join(project_path, "features")
+
+        # Show metadata configuration dialog
+        metadata_dialog = MetadataConfigDialog(input_folder, self)
+        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+            return  # User cancelled
+
+        metadata_config = metadata_dialog.get_config()
+
         # Start extraction
         self.show_features_progress("Starting feature extraction...")
+
+        if metadata_config:
+            self.show_features_progress(f"Metadata extraction configured: {list(metadata_config.folder_mappings.values())}")
+        else:
+            self.show_features_progress("No metadata extraction (using original filenames)")
 
         try:
             # Import core modules
             sys.path.append(os.path.dirname(project_path))
             from core.feature_extraction import BatchFeatureExtractor
-            from core.config import ConfigManager
+            from core.config import get_config_manager
 
-            # Set up paths
-            input_folder = os.path.join(project_path, "input")
-            output_folder = os.path.join(project_path, "features")
+            # Get shared config manager (same one used by Tune Parameters tab)
+            config_manager = get_config_manager()
 
-            # Load parameters
+            # Optionally override with parameter file if specified
             param_path = self.features_param_edit.text().strip()
-            config_manager = ConfigManager()
             if param_path and os.path.exists(param_path):
                 config_manager.import_parameters(param_path)
                 self.show_features_progress(f"Using parameters from: {os.path.basename(param_path)}")
             else:
-                self.show_features_progress("Using default parameters")
+                # Use current config (from Tune Parameters or last loaded file)
+                ear_mode = "Prominence" if config_manager.config.ear_detector.use_prominence_mode else "Absolute"
+                self.show_features_progress(f"Using current parameters (Ear Detection: {ear_mode} Mode)")
 
-            # Create batch extractor
+            # Create batch extractor with optional metadata config
             extractor = BatchFeatureExtractor(
                 config_manager.config.ear_detector,
                 config_manager.config.head_detector,
                 config_manager.config.node_mapping,
-                config_manager.config.default_fps
+                config_manager.config.default_fps,
+                metadata_config=metadata_config
             )
 
             # Process files
@@ -403,6 +453,80 @@ class PrepareDataTab(QWidget):
             subprocess.run(['open', features_folder])
         else:
             subprocess.run(['xdg-open', features_folder])
+
+    def combine_all_features(self):
+        """Combine all feature CSV files into a single master file."""
+        if not self.project_manager:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        features_folder = os.path.join(project_path, "features")
+        if not os.path.exists(features_folder):
+            QMessageBox.warning(
+                self,
+                "No Features",
+                "Features folder does not exist. Extract features first."
+            )
+            return
+
+        # Count existing feature files
+        feature_files = glob.glob(os.path.join(features_folder, "*_htr_features.csv"))
+        if not feature_files:
+            QMessageBox.warning(
+                self,
+                "No Features",
+                "No feature files found in features folder."
+            )
+            return
+
+        # Confirm
+        reply = QMessageBox.question(
+            self,
+            "Combine Features",
+            f"Combine {len(feature_files)} feature files into a single CSV?\n\n"
+            "This will create 'all_features_combined.csv' in the features folder.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        self.show_features_progress("Combining feature files...")
+
+        try:
+            from core.feature_extraction import BatchFeatureExtractor
+
+            result = BatchFeatureExtractor.combine_feature_files(features_folder)
+
+            if result['success']:
+                self.show_features_progress(
+                    f"✅ Combined {result['files_combined']} files → {result['total_rows']} total rows"
+                )
+                self.show_features_progress(f"Saved to: {result['output_file']}")
+
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Combined {result['files_combined']} feature files.\n\n"
+                    f"Total rows: {result['total_rows']}\n"
+                    f"Output: all_features_combined.csv"
+                )
+            else:
+                self.show_features_progress(f"❌ Failed: {result.get('error', 'Unknown error')}")
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Failed to combine features:\n{result.get('error', 'Unknown error')}"
+                )
+
+        except Exception as e:
+            self.show_features_progress(f"❌ Error: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to combine features:\n{str(e)}")
 
     def on_labels_changed(self):
         """Handle label changes in the CSV editor."""

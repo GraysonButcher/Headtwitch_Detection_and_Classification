@@ -98,6 +98,16 @@ def calculate_ear_distances(left_ear_locs: np.ndarray,
     right_distances = []
 
     for i in range(n_frames):
+        # Check if any required body part has NaN coordinates for this frame
+        if (np.any(np.isnan(left_ear_locs[i])) or
+            np.any(np.isnan(right_ear_locs[i])) or
+            np.any(np.isnan(back_locs[i])) or
+            np.any(np.isnan(nose_locs[i]))):
+            # Skip this frame - can't calculate valid distances
+            left_distances.append(np.nan)
+            right_distances.append(np.nan)
+            continue
+
         # Find intersection of back-nose line and left_ear-right_ear line
         intersection = line_intersection(
             back_locs[i], nose_locs[i],
@@ -144,6 +154,14 @@ def calculate_head_signal(head_locs: np.ndarray,
     distances = []
 
     for i in range(n_frames):
+        # Check if any required body part has NaN coordinates for this frame
+        if (np.any(np.isnan(head_locs[i])) or
+            np.any(np.isnan(back_locs[i])) or
+            np.any(np.isnan(nose_locs[i]))):
+            # Skip this frame - can't calculate valid distance
+            distances.append(np.nan)
+            continue
+
         # Calculate perpendicular distance from head to back-nose line
         dist = point_line_distance(head_locs[i], back_locs[i], nose_locs[i])
         distances.append(dist)

@@ -200,15 +200,34 @@ class ParameterPanel(QWidget):
         """Create detector row with Ear Detector (left) and Head Detector (right)."""
         row_layout = QHBoxLayout()
         row_layout.setSpacing(10)
-        
+
         # Left column - Ear Detector
         ear_group = QGroupBox("Ear Detector Parameters")
         ear_layout = QVBoxLayout(ear_group)
         ear_layout.setSpacing(6)
-        
-        # Thresholds
-        self.add_compact_spinbox_parameter(ear_layout, "ear_peak_threshold", "Peak Thresh:", 1, 100, "Minimum peak height")
-        self.add_compact_spinbox_parameter(ear_layout, "ear_valley_threshold", "Valley Thresh:", 1, 100, "Minimum valley depth")
+
+        # Detection Mode Selection
+        self.add_compact_checkbox_parameter(ear_layout, "ear_use_prominence_mode", "Use Prominence Mode",
+                                           "Use relative prominence instead of absolute thresholds")
+        # Connect to special handler for UI updates
+        ear_mode_checkbox = self.parameter_widgets.get("ear_use_prominence_mode")
+        if ear_mode_checkbox:
+            ear_mode_checkbox.stateChanged.disconnect()  # Disconnect generic handler
+            ear_mode_checkbox.stateChanged.connect(self.on_ear_mode_changed)  # Connect to special handler
+
+        # Prominence parameter (for prominence mode)
+        self.add_compact_spinbox_parameter(ear_layout, "ear_prominence", "Ear Prominence:", 1, 50,
+                                          "Prominence value for peak/valley detection (prominence mode)")
+
+        # Separator for visual clarity
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setStyleSheet("background-color: #ccc;")
+        ear_layout.addWidget(separator)
+
+        # Absolute Thresholds (for absolute mode)
+        self.add_compact_spinbox_parameter(ear_layout, "ear_peak_threshold", "Peak Thresh:", 1, 100, "Minimum peak height (absolute mode)")
+        self.add_compact_spinbox_parameter(ear_layout, "ear_valley_threshold", "Valley Thresh:", 1, 100, "Minimum valley depth (absolute mode)")
         
         # Gaps and timing
         self.add_compact_spinbox_parameter(ear_layout, "ear_max_gap", "Max Gap:", 1, 20, "Maximum gap between peaks")
@@ -433,9 +452,46 @@ class ParameterPanel(QWidget):
         row_layout.addWidget(label_widget)
         row_layout.addWidget(combo)
         row_layout.addStretch()
-        
+
         layout.addLayout(row_layout)
-    
+
+    def update_ear_mode_ui(self):
+        """Update UI to grey out irrelevant ear detection parameters based on mode."""
+        use_prominence = self.get_parameter_value("ear_use_prominence_mode")
+
+        # Get the widgets
+        prominence_widget = self.parameter_widgets.get("ear_prominence")
+        peak_thresh_widget = self.parameter_widgets.get("ear_peak_threshold")
+        valley_thresh_widget = self.parameter_widgets.get("ear_valley_threshold")
+
+        if use_prominence:
+            # Prominence mode: enable prominence, disable absolute thresholds
+            if prominence_widget:
+                prominence_widget.setEnabled(True)
+                prominence_widget.setStyleSheet("")
+            if peak_thresh_widget:
+                peak_thresh_widget.setEnabled(False)
+                peak_thresh_widget.setStyleSheet("background-color: #e0e0e0; color: #888;")
+            if valley_thresh_widget:
+                valley_thresh_widget.setEnabled(False)
+                valley_thresh_widget.setStyleSheet("background-color: #e0e0e0; color: #888;")
+        else:
+            # Absolute mode: disable prominence, enable absolute thresholds
+            if prominence_widget:
+                prominence_widget.setEnabled(False)
+                prominence_widget.setStyleSheet("background-color: #e0e0e0; color: #888;")
+            if peak_thresh_widget:
+                peak_thresh_widget.setEnabled(True)
+                peak_thresh_widget.setStyleSheet("")
+            if valley_thresh_widget:
+                valley_thresh_widget.setEnabled(True)
+                valley_thresh_widget.setStyleSheet("")
+
+    def on_ear_mode_changed(self, state):
+        """Handle ear detection mode checkbox change."""
+        self.update_ear_mode_ui()
+        self.on_parameter_changed()
+
     def load_current_parameters(self):
         """Load current parameters from config manager."""
         if not self.config_manager:
@@ -450,6 +506,8 @@ class ParameterPanel(QWidget):
             
             # Load ear detector parameters
             ear = config.ear_detector
+            self.set_parameter_value("ear_use_prominence_mode", ear.use_prominence_mode)
+            self.set_parameter_value("ear_prominence", ear.ear_prominence)
             self.set_parameter_value("ear_peak_threshold", ear.peak_threshold)
             self.set_parameter_value("ear_valley_threshold", ear.valley_threshold)
             self.set_parameter_value("ear_max_gap", ear.max_gap)
@@ -481,14 +539,16 @@ class ParameterPanel(QWidget):
             # Load general settings
             self.set_parameter_value("default_fps", config.default_fps)
             self.set_parameter_value("iou_threshold", config.iou_threshold)
-            
+
             self.status_label.setText("Current parameters loaded")
-            
+
         except Exception as e:
             self.status_label.setText(f"Error loading parameters: {str(e)}")
         finally:
             # Reconnect signals after all parameters are set
             self.connect_parameter_signals()
+            # Update UI state for ear detection mode
+            self.update_ear_mode_ui()
     
     def set_parameter_value(self, key, value):
         """Set parameter widget value safely."""
@@ -543,13 +603,17 @@ class ParameterPanel(QWidget):
     
     def connect_parameter_signals(self):
         """Reconnect all parameter change signals."""
-        for widget in self.parameter_widgets.values():
+        for key, widget in self.parameter_widgets.items():
             if isinstance(widget, QSpinBox):
                 widget.valueChanged.connect(self.on_parameter_changed)
             elif isinstance(widget, QDoubleSpinBox):
                 widget.valueChanged.connect(self.on_parameter_changed)
             elif isinstance(widget, QCheckBox):
-                widget.stateChanged.connect(self.on_parameter_changed)
+                # Special handler for ear mode checkbox
+                if key == "ear_use_prominence_mode":
+                    widget.stateChanged.connect(self.on_ear_mode_changed)
+                else:
+                    widget.stateChanged.connect(self.on_parameter_changed)
             elif isinstance(widget, QComboBox):
                 widget.currentTextChanged.connect(self.on_parameter_changed)
     
@@ -569,6 +633,8 @@ class ParameterPanel(QWidget):
             config = self.config_manager.config
             
             # Apply ear detector parameters
+            config.ear_detector.use_prominence_mode = self.get_parameter_value("ear_use_prominence_mode")
+            config.ear_detector.ear_prominence = self.get_parameter_value("ear_prominence")
             config.ear_detector.peak_threshold = self.get_parameter_value("ear_peak_threshold")
             config.ear_detector.valley_threshold = self.get_parameter_value("ear_valley_threshold")
             config.ear_detector.max_gap = self.get_parameter_value("ear_max_gap")

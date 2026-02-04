@@ -5,11 +5,233 @@ Extracts comprehensive features for machine learning classification.
 import numpy as np
 import pandas as pd
 import warnings
+import re
+import os
+import glob
+from dataclasses import dataclass, field
 from scipy.signal import find_peaks
 from typing import List, Dict, Any, Tuple, Optional
 from .data_processing import SleapDataLoader, SignalProcessor
 from .detectors import CombinedDetector, EarsDetector, HeadDetector
 from .config import EarDetectorConfig, HeadDetectorConfig, NodeMapping
+
+
+@dataclass
+class MetadataConfig:
+    """Configuration for extracting metadata from file paths.
+
+    Attributes:
+        folder_mappings: Maps folder levels (relative to file) to field names.
+                        e.g., {-2: 'cohort', -1: 'drug_dose'} means:
+                        - folder 2 levels up from file = cohort
+                        - folder 1 level up from file = drug_dose
+        field_templates: Templates for parsing combined fields.
+                        e.g., {'drug_dose': '{drug}_{dose}'} parses "Psi_0.1mgkg"
+                        into drug="Psi", dose="0.1mgkg"
+        template_match_mode: 'first' or 'last' - which delimiter to match when ambiguous
+        rat_id_pattern: Regex pattern to extract rat_id from filename.
+                       Default extracts first segment before '__'
+    """
+    folder_mappings: Dict[int, str] = field(default_factory=dict)
+    field_templates: Dict[str, str] = field(default_factory=dict)
+    template_match_mode: str = 'first'  # 'first' or 'last'
+    rat_id_pattern: str = r'^(\d+[a-zA-Z]?)__'  # Default: digits (optionally followed by letter) before __
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'folder_mappings': {str(k): v for k, v in self.folder_mappings.items()},
+            'field_templates': self.field_templates,
+            'template_match_mode': self.template_match_mode,
+            'rat_id_pattern': self.rat_id_pattern
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'MetadataConfig':
+        """Create from dictionary."""
+        folder_mappings = {int(k): v for k, v in data.get('folder_mappings', {}).items()}
+        return cls(
+            folder_mappings=folder_mappings,
+            field_templates=data.get('field_templates', {}),
+            template_match_mode=data.get('template_match_mode', 'first'),
+            rat_id_pattern=data.get('rat_id_pattern', r'^(\d+[a-zA-Z]?)__')
+        )
+
+
+class MetadataExtractor:
+    """Extracts metadata from file paths based on configuration."""
+
+    def __init__(self, config: MetadataConfig):
+        self.config = config
+        self._compiled_templates = {}
+        self._compile_templates()
+
+    def _compile_templates(self):
+        """Pre-compile template patterns for efficiency."""
+        for field_name, template in self.config.field_templates.items():
+            # Convert template like "{drug}_{dose}" into a regex pattern
+            # that captures the named groups
+            pattern = self._template_to_regex(template)
+            self._compiled_templates[field_name] = re.compile(pattern)
+
+    def _template_to_regex(self, template: str) -> str:
+        """Convert a template string to a regex pattern.
+
+        e.g., "{drug}_{dose}" -> "(?P<drug>.+?)_(?P<dose>.+)"
+
+        The first placeholder is non-greedy, the last is greedy (or vice versa
+        based on template_match_mode).
+        """
+        # Find all placeholders like {name}
+        placeholders = re.findall(r'\{(\w+)\}', template)
+
+        if not placeholders:
+            return re.escape(template)
+
+        # Build regex pattern
+        pattern = template
+        for i, ph in enumerate(placeholders):
+            is_last = (i == len(placeholders) - 1)
+
+            # Determine greediness based on match mode
+            if self.config.template_match_mode == 'first':
+                # First match: early placeholders are non-greedy, last is greedy
+                quantifier = '.+' if is_last else '.+?'
+            else:
+                # Last match: early placeholders are greedy, last is non-greedy
+                quantifier = '.+?' if is_last else '.+'
+
+            pattern = pattern.replace(f'{{{ph}}}', f'(?P<{ph}>{quantifier})', 1)
+
+        # Escape any remaining special regex characters (except our groups)
+        # We need to be careful not to escape our (?P<...>) groups
+        # So we do a targeted escape of common delimiters
+        for char in ['.', '+', '*', '?', '[', ']', '(', ')', '^', '$', '|', '\\']:
+            # Don't escape if it's part of our regex syntax
+            if char not in ['(', ')', '?', '<', '>', '+', '.']:
+                pattern = pattern.replace(char, f'\\{char}')
+
+        return f'^{pattern}$'
+
+    def extract_metadata(self, file_path: str) -> Dict[str, str]:
+        """Extract metadata from a file path.
+
+        Args:
+            file_path: Full path to the H5 file
+
+        Returns:
+            Dictionary with extracted metadata fields (cohort, drug, dose, rat_id, etc.)
+        """
+        metadata = {}
+
+        # Normalize path separators
+        file_path = os.path.normpath(file_path)
+
+        # Extract folder-based metadata
+        path_parts = file_path.split(os.sep)
+        filename = path_parts[-1]
+
+        for level, field_name in self.config.folder_mappings.items():
+            try:
+                # level is negative (e.g., -2 means 2 folders up from file)
+                # path_parts[-1] is the filename, so -2 is path_parts[-2], etc.
+                folder_index = level - 1  # Adjust because -1 is filename
+                folder_value = path_parts[folder_index]
+                metadata[field_name] = folder_value
+            except IndexError:
+                metadata[field_name] = ''
+
+        # Parse combined fields using templates
+        for combined_field, template in self.config.field_templates.items():
+            if combined_field in metadata:
+                value = metadata[combined_field]
+                parsed = self._parse_template(value, combined_field)
+                if parsed:
+                    metadata.update(parsed)
+                    # Remove the combined field since we've expanded it
+                    del metadata[combined_field]
+
+        # Extract rat_id from filename
+        rat_id_match = re.match(self.config.rat_id_pattern, filename)
+        if rat_id_match:
+            metadata['rat_id'] = rat_id_match.group(1)
+        else:
+            # Fallback: use filename without extension
+            base_name = os.path.splitext(filename)[0]
+            # Try to get first part before common separators
+            for sep in ['__', '_', '-', ' ']:
+                if sep in base_name:
+                    metadata['rat_id'] = base_name.split(sep)[0]
+                    break
+            else:
+                metadata['rat_id'] = base_name
+
+        return metadata
+
+    def _parse_template(self, value: str, field_name: str) -> Optional[Dict[str, str]]:
+        """Parse a value using its template pattern."""
+        if field_name not in self._compiled_templates:
+            return None
+
+        pattern = self._compiled_templates[field_name]
+        match = pattern.match(value)
+
+        if match:
+            return match.groupdict()
+
+        return None
+
+    def generate_output_filename(self, file_path: str, suffix: str = '_htr_features.csv') -> str:
+        """Generate a unique output filename including metadata.
+
+        Args:
+            file_path: Full path to the source H5 file
+            suffix: Suffix to append (default: '_htr_features.csv')
+
+        Returns:
+            Unique filename like "Cohort_1_Psi_0.1mgkg_6010_htr_features.csv"
+        """
+        metadata = self.extract_metadata(file_path)
+
+        # Build filename from metadata components
+        # Order: cohort, drug, dose, rat_id (skip any empty values)
+        components = []
+
+        # Add cohort if present
+        if metadata.get('cohort'):
+            components.append(metadata['cohort'].replace(' ', '_'))
+
+        # Add drug if present
+        if metadata.get('drug'):
+            components.append(metadata['drug'])
+
+        # Add dose if present
+        if metadata.get('dose'):
+            components.append(metadata['dose'])
+
+        # Always add rat_id
+        if metadata.get('rat_id'):
+            components.append(metadata['rat_id'])
+
+        # Join with underscores and add suffix
+        if components:
+            return '_'.join(components) + suffix
+        else:
+            # Fallback to original filename
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            return base_name + suffix
+
+    def get_metadata_columns(self, file_path: str) -> Dict[str, str]:
+        """Get metadata as columns to add to a DataFrame.
+
+        Returns only the 'clean' fields (cohort, drug, dose, rat_id),
+        not intermediate combined fields.
+        """
+        metadata = self.extract_metadata(file_path)
+
+        # Return only the standard columns we want in the CSV
+        standard_fields = ['cohort', 'drug', 'dose', 'rat_id']
+        return {k: metadata.get(k, '') for k in standard_fields if k in metadata or k == 'rat_id'}
 
 
 class FeatureExtractor:
@@ -124,30 +346,83 @@ class FeatureExtractor:
                 amplitudes = [abs(unit['left_amp'] - unit['right_amp']) for unit in units_in_candidate]
                 features['ear_crisscross_median_amplitude'] = np.median(amplitudes)
     
-    def _add_oscillatory_features(self, features: Dict, start_frame: int, end_frame: int, 
+    def _add_oscillatory_features(self, features: Dict, start_frame: int, end_frame: int,
                                 ear_detector: Optional[EarsDetector], head_detector: Optional[HeadDetector], instance: int):
         """Add oscillatory features for head and ear signals."""
-        # Use detector signals if available (like legacy), otherwise calculate fresh
-        if head_detector and hasattr(head_detector, 'signal') and head_detector.signal is not None:
-            # Use head detector's processed signal (may be smoothed)
-            head_signal = head_detector.signal
+        # HEAD SIGNAL: Use detector's actual cycles for consistency with detection
+        if head_detector and hasattr(head_detector, 'cycles') and head_detector.cycles:
+            head_features = self._get_head_features_from_detector(head_detector, start_frame, end_frame)
         else:
+            # Fallback: calculate from signal if no detector available
             head_signal = self._get_signal_for_window('head', start_frame, end_frame, instance)
-        
+            head_features = self._get_oscillatory_features_for_signal(head_signal, start_frame, end_frame)
+
+        for feature_name, value in head_features.items():
+            features[f'head_{feature_name}'] = value
+
+        # EAR SIGNALS: Still use signal-based calculation (ear detection uses different logic)
         if ear_detector and hasattr(ear_detector, 'left_ear_distances') and ear_detector.left_ear_distances is not None:
-            # Use ear detector's processed signals
             left_ear_signal = ear_detector.left_ear_distances
             right_ear_signal = ear_detector.right_ear_distances
         else:
-            left_ear_signal = self._get_signal_for_window('left_ear', start_frame, end_frame, instance)  
+            left_ear_signal = self._get_signal_for_window('left_ear', start_frame, end_frame, instance)
             right_ear_signal = self._get_signal_for_window('right_ear', start_frame, end_frame, instance)
-        
-        # Extract oscillatory features for each signal
-        for signal_name, signal_data in [('head', head_signal), ('leftear', left_ear_signal), ('rightear', right_ear_signal)]:
+
+        for signal_name, signal_data in [('leftear', left_ear_signal), ('rightear', right_ear_signal)]:
             osc_features = self._get_oscillatory_features_for_signal(signal_data, start_frame, end_frame)
-            
             for feature_name, value in osc_features.items():
                 features[f'{signal_name}_{feature_name}'] = value
+
+    def _get_head_features_from_detector(self, head_detector: HeadDetector, start_frame: int, end_frame: int) -> Dict[str, float]:
+        """
+        Calculate head oscillatory features using the detector's actual cycle data.
+
+        This ensures consistency between detection and feature extraction by using
+        the same cycles that the detector found (with proper smoothing, prominence, etc.)
+        rather than recalculating with different parameters.
+        """
+        default_features = {
+            'oscillation_count': 0,
+            'frequency_hz': 0,
+            'median_amplitude': 0,
+            'max_amplitude': 0,
+            'amplitude_std_dev': 0,
+            'mean_inter_cycle_interval_ms': 0,
+            'std_inter_cycle_interval_ms': 0
+        }
+
+        # Filter detector's cycles to those within/overlapping the candidate window
+        cycles_in_window = [
+            cycle for cycle in head_detector.cycles
+            if cycle['start'] < end_frame and cycle['end'] > start_frame
+        ]
+
+        if not cycles_in_window:
+            return default_features
+
+        # Calculate features from the detector's cycles
+        features = {}
+        duration_s = (end_frame - start_frame) / self.fps
+
+        features['oscillation_count'] = len(cycles_in_window)
+        features['frequency_hz'] = features['oscillation_count'] / duration_s if duration_s > 0 else 0
+
+        amplitudes = [c['amplitude'] for c in cycles_in_window]
+        features['median_amplitude'] = np.median(amplitudes)
+        features['max_amplitude'] = np.max(amplitudes)
+        features['amplitude_std_dev'] = np.std(amplitudes) if len(amplitudes) > 1 else 0
+
+        # Inter-cycle intervals
+        if len(cycles_in_window) > 1:
+            cycle_starts = [c['start'] for c in cycles_in_window]
+            inter_cycle_intervals = np.diff(cycle_starts) / self.fps * 1000  # Convert to ms
+            features['mean_inter_cycle_interval_ms'] = np.mean(inter_cycle_intervals)
+            features['std_inter_cycle_interval_ms'] = np.std(inter_cycle_intervals)
+        else:
+            features['mean_inter_cycle_interval_ms'] = 0
+            features['std_inter_cycle_interval_ms'] = 0
+
+        return features
     
     def _get_signal_for_window(self, signal_type: str, start_frame: int, end_frame: int, instance: int) -> np.ndarray:
         """Get signal data for a specific window."""
@@ -251,7 +526,10 @@ class FeatureExtractor:
         """Add kinematic features based on node movement."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            
+
+            # Track all displacements for total calculation
+            all_displacements = []
+
             # Head kinematics
             head_pos = self.data_loader.get_node_positions(
                 self.node_mapping.head, start_frame, end_frame, instance
@@ -260,15 +538,44 @@ class FeatureExtractor:
             features['total_displacement_head'] = head_kinematics['total_displacement']
             features['peak_velocity_head'] = head_kinematics['peak_velocity']
             features['mean_jerk_head'] = head_kinematics['mean_jerk']
-            
-            # Back kinematics  
+            all_displacements.append(head_kinematics['total_displacement'])
+
+            # Back kinematics
             back_pos = self.data_loader.get_node_positions(
                 self.node_mapping.back, start_frame, end_frame, instance
             )
             back_kinematics = self._calculate_kinematics(back_pos)
             features['total_displacement_back'] = back_kinematics['total_displacement']
             features['peak_velocity_back'] = back_kinematics['peak_velocity']
-            
+            all_displacements.append(back_kinematics['total_displacement'])
+
+            # Left ear kinematics
+            left_ear_pos = self.data_loader.get_node_positions(
+                self.node_mapping.left_ear, start_frame, end_frame, instance
+            )
+            left_ear_kinematics = self._calculate_kinematics(left_ear_pos)
+            features['total_displacement_left_ear'] = left_ear_kinematics['total_displacement']
+            all_displacements.append(left_ear_kinematics['total_displacement'])
+
+            # Right ear kinematics
+            right_ear_pos = self.data_loader.get_node_positions(
+                self.node_mapping.right_ear, start_frame, end_frame, instance
+            )
+            right_ear_kinematics = self._calculate_kinematics(right_ear_pos)
+            features['total_displacement_right_ear'] = right_ear_kinematics['total_displacement']
+            all_displacements.append(right_ear_kinematics['total_displacement'])
+
+            # Nose kinematics
+            nose_pos = self.data_loader.get_node_positions(
+                self.node_mapping.nose, start_frame, end_frame, instance
+            )
+            nose_kinematics = self._calculate_kinematics(nose_pos)
+            features['total_displacement_nose'] = nose_kinematics['total_displacement']
+            all_displacements.append(nose_kinematics['total_displacement'])
+
+            # Total displacement across all body parts
+            features['total_displacement_all'] = sum(all_displacements)
+
             # Ratio feature
             if features['peak_velocity_head'] > 0:
                 features['back_head_velocity_ratio'] = features['peak_velocity_back'] / features['peak_velocity_head']
@@ -332,62 +639,93 @@ class FeatureExtractor:
 
 class BatchFeatureExtractor:
     """Handles batch feature extraction for multiple H5 files."""
-    
-    def __init__(self, ear_config: EarDetectorConfig, head_config: HeadDetectorConfig, 
-                 node_mapping: NodeMapping, fps: int):
+
+    def __init__(self, ear_config: EarDetectorConfig, head_config: HeadDetectorConfig,
+                 node_mapping: NodeMapping, fps: int, metadata_config: Optional[MetadataConfig] = None):
         self.ear_config = ear_config
         self.head_config = head_config
         self.node_mapping = node_mapping
         self.fps = fps
-    
+        self.metadata_config = metadata_config
+        self.metadata_extractor = MetadataExtractor(metadata_config) if metadata_config else None
+
     def process_file(self, h5_path: str, output_path: Optional[str] = None) -> pd.DataFrame:
-        """Process a single H5 file and extract features for all candidate windows."""
+        """Process a single H5 file and extract features for all candidate windows.
+
+        Args:
+            h5_path: Path to the H5 file
+            output_path: Optional path for saving CSV. If None and metadata_config is set,
+                        the path will be auto-generated based on metadata.
+
+        Returns:
+            DataFrame with extracted features (including metadata columns if configured)
+        """
         print(f"Processing: {h5_path}")
-        
+
         # Load data
         data_loader = SleapDataLoader(h5_path)
         if not data_loader.load_data():
             print(f"Error: Could not load data from {h5_path}")
             return pd.DataFrame()
-        
+
         print(f"Loaded {data_loader.total_frames} frames with {data_loader.locations.shape[1]} nodes")
-        
+
         # Run combined detection to get candidate windows
         combined_detector = CombinedDetector(data_loader, self.ear_config, self.head_config, self.node_mapping)
-        
+
         print("Running ear-based detection...")
         ear_events = combined_detector.ear_detector.detect_headshakes()
         print(f"Found {len(ear_events)} ear-based events")
-        
+
         print("Running head-based detection...")
         head_events = combined_detector.head_detector.detect_headshakes()
         print(f"Found {len(head_events)} head-based events")
-        
+
         # Combine and merge candidate windows
         print("Merging detections into candidate pool...")
         candidate_pool = self._combine_and_merge_candidates(ear_events, head_events)
         print(f"Created {len(candidate_pool)} unique candidate windows")
-        
+
         if not candidate_pool:
             print("No candidates found")
             return pd.DataFrame()
-        
+
         # Extract features
         print("Extracting features...")
         feature_extractor = FeatureExtractor(data_loader, self.ear_config, self.head_config, self.node_mapping, self.fps)
         features_df = feature_extractor.extract_candidate_features(
-            candidate_pool, 
-            combined_detector.ear_detector, 
+            candidate_pool,
+            combined_detector.ear_detector,
             combined_detector.head_detector
         )
-        
+
+        # Add metadata columns if configured
+        if self.metadata_extractor and not features_df.empty:
+            metadata_cols = self.metadata_extractor.get_metadata_columns(h5_path)
+            # Add metadata columns at the beginning (after core frame columns)
+            for col_name, col_value in metadata_cols.items():
+                features_df.insert(0, col_name, col_value)
+            print(f"Added metadata columns: {list(metadata_cols.keys())}")
+
         # Save results if output path provided
         if output_path:
             features_df.to_csv(output_path, index=False)
             print(f"Results saved to: {output_path}")
-        
+
         print(f"Feature extraction complete. Generated {len(features_df)} feature vectors.")
         return features_df
+
+    def get_output_filename(self, h5_path: str) -> str:
+        """Generate output filename for an H5 file.
+
+        Uses metadata-based naming if configured, otherwise falls back to
+        the original filename with _htr_features.csv suffix.
+        """
+        if self.metadata_extractor:
+            return self.metadata_extractor.generate_output_filename(h5_path)
+        else:
+            base_name = os.path.splitext(os.path.basename(h5_path))[0]
+            return f"{base_name}_htr_features.csv"
     
     def _combine_and_merge_candidates(self, ear_events: List[Tuple[int, int]], 
                                     head_events: List[Tuple[int, int]], merge_gap: int = 5) -> List[Tuple[int, int]]:
@@ -422,9 +760,6 @@ class BatchFeatureExtractor:
         Returns:
             Dict with processing results: {'success': bool, 'files_processed': int, 'error': str}
         """
-        import os
-        import glob
-        
         # Ensure output folder exists
         os.makedirs(output_folder, exist_ok=True)
         
@@ -446,24 +781,24 @@ class BatchFeatureExtractor:
         
         for h5_file in h5_files:
             try:
-                # Generate output filename
-                base_name = os.path.splitext(os.path.basename(h5_file))[0]
-                output_path = os.path.join(output_folder, f"{base_name}_htr_features.csv")
-                
+                # Generate output filename (uses metadata if configured)
+                output_filename = self.get_output_filename(h5_file)
+                output_path = os.path.join(output_folder, output_filename)
+
                 # Skip if already exists
                 if os.path.exists(output_path):
-                    print(f"Skipping {base_name} (already exists)")
+                    print(f"Skipping {output_filename} (already exists)")
                     files_processed += 1
                     continue
-                
+
                 # Process the file
                 features_df = self.process_file(h5_file, output_path)
-                
+
                 if not features_df.empty:
                     files_processed += 1
-                    print(f"✓ Processed {base_name}: {len(features_df)} features")
+                    print(f"✓ Processed {output_filename}: {len(features_df)} features")
                 else:
-                    print(f"⚠ No features found in {base_name}")
+                    print(f"⚠ No features found in {output_filename}")
                     failed_files.append(h5_file)
                     
             except Exception as e:
@@ -472,9 +807,92 @@ class BatchFeatureExtractor:
         
         success = files_processed > 0
         error_msg = f"Failed to process {len(failed_files)} files" if failed_files else None
-        
+
         return {
             'success': success,
             'files_processed': files_processed,
             'error': error_msg
+        }
+
+    @staticmethod
+    def combine_feature_files(features_folder: str, output_filename: str = 'all_features_combined.csv') -> Dict[str, Any]:
+        """Combine all feature CSV files into a single master file.
+
+        Args:
+            features_folder: Path to folder containing *_htr_features.csv files
+            output_filename: Name of the output combined file (default: all_features_combined.csv)
+
+        Returns:
+            Dict with results: {'success': bool, 'files_combined': int, 'total_rows': int,
+                               'output_file': str, 'error': str}
+        """
+        import pandas as pd
+
+        # Find all feature files
+        feature_pattern = os.path.join(features_folder, "*_htr_features.csv")
+        feature_files = glob.glob(feature_pattern)
+
+        if not feature_files:
+            return {
+                'success': False,
+                'files_combined': 0,
+                'total_rows': 0,
+                'output_file': None,
+                'error': f'No *_htr_features.csv files found in {features_folder}'
+            }
+
+        print(f"Found {len(feature_files)} feature files to combine")
+
+        # Load and combine all files
+        all_dfs = []
+        files_loaded = 0
+        failed_files = []
+
+        for file_path in sorted(feature_files):
+            try:
+                df = pd.read_csv(file_path)
+
+                # Add source filename column if not already present
+                if 'source_file' not in df.columns:
+                    df['source_file'] = os.path.basename(file_path)
+
+                all_dfs.append(df)
+                files_loaded += 1
+                print(f"  Loaded: {os.path.basename(file_path)} ({len(df)} rows)")
+
+            except Exception as e:
+                print(f"  Warning: Could not read {os.path.basename(file_path)}: {e}")
+                failed_files.append(file_path)
+
+        if not all_dfs:
+            return {
+                'success': False,
+                'files_combined': 0,
+                'total_rows': 0,
+                'output_file': None,
+                'error': 'No valid feature files could be loaded'
+            }
+
+        # Combine all dataframes
+        combined_df = pd.concat(all_dfs, ignore_index=True)
+
+        # Reorder columns: put metadata columns first if they exist
+        metadata_cols = ['source_file', 'cohort', 'drug', 'dose', 'rat_id']
+        existing_metadata = [col for col in metadata_cols if col in combined_df.columns]
+        other_cols = [col for col in combined_df.columns if col not in metadata_cols]
+        combined_df = combined_df[existing_metadata + other_cols]
+
+        # Save combined file
+        output_path = os.path.join(features_folder, output_filename)
+        combined_df.to_csv(output_path, index=False)
+
+        print(f"Combined {files_loaded} files into {output_filename}")
+        print(f"Total rows: {len(combined_df)}")
+
+        return {
+            'success': True,
+            'files_combined': files_loaded,
+            'total_rows': len(combined_df),
+            'output_file': output_path,
+            'error': f"Failed to load {len(failed_files)} files" if failed_files else None
         }

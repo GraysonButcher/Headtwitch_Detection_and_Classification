@@ -11,8 +11,13 @@ from typing import Dict, Any, Optional
 @dataclass
 class EarDetectorConfig:
     """Configuration parameters for ear-based headshake detection."""
+    # Detection mode
+    use_prominence_mode: bool = False  # If True, use prominence-based detection instead of absolute thresholds
+    ear_prominence: int = 5            # Prominence value for peak/valley detection (used when use_prominence_mode=True)
+    # Absolute threshold parameters (used when use_prominence_mode=False)
     peak_threshold: int = 30
     valley_threshold: int = 30
+    # Common parameters
     max_gap: int = 2
     quick_gap: int = 5
     min_crisscrosses: int = 5
