@@ -14,7 +14,7 @@ import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 
 
 class DiagnosticsGraphWidget(QWidget):
@@ -56,14 +56,21 @@ class DiagnosticsGraphWidget(QWidget):
             'head_amplitude_threshold': 2,  # For cycle pass/fail visualization
             'head_max_cycle_gap': 5,  # For grouping cycles into oscillation groups
             'head_min_oscillations': 3,  # Minimum oscillations for valid group
-            # Ear detector params (uses height thresholds)
-            'ear_peak_height': 10,
-            'ear_valley_height': 10,
+            'head_use_smoothing': True,  # Apply smoothing to head signal (matches detector)
+            'head_smoothing_window': 5,  # Savitzky-Golay window size
+            'head_smoothing_polyorder': 2,  # Savitzky-Golay polynomial order
+            # Ear detector mode and params
+            'ear_use_prominence_mode': False,  # If True, use prominence instead of height
+            'ear_prominence': 5,  # Prominence value (used when ear_use_prominence_mode=True)
+            'ear_peak_height': 10,  # Height threshold (used when ear_use_prominence_mode=False)
+            'ear_valley_height': 10,  # Height threshold (used when ear_use_prominence_mode=False)
             'ear_distance': 2,  # max_gap in detector
             'ear_quick_gap': 5,  # For crisscross pairing
             'ear_between_unit_gap': 15,  # For grouping crisscrosses
             'ear_min_crisscrosses': 2  # Minimum crisscrosses for valid group
         }
+        # Cached smoothed head signal (computed in _calculate_peaks)
+        self.head_signal_smoothed = None
         # Peak/valley scatter plot references
         self.left_ear_peaks_scatter = None
         self.left_ear_valleys_scatter = None
@@ -461,6 +468,9 @@ class DiagnosticsGraphWidget(QWidget):
     def update_peaks(self, head_prominence: int = 1, head_distance: int = 1,
                      head_amplitude_threshold: int = 2,
                      head_max_cycle_gap: int = 5, head_min_oscillations: int = 3,
+                     head_use_smoothing: bool = True, head_smoothing_window: int = 5,
+                     head_smoothing_polyorder: int = 2,
+                     ear_use_prominence_mode: bool = False, ear_prominence: int = 5,
                      ear_peak_height: int = 10, ear_valley_height: int = 10,
                      ear_distance: int = 2, ear_quick_gap: int = 5,
                      ear_between_unit_gap: int = 15, ear_min_crisscrosses: int = 2):
@@ -476,8 +486,13 @@ class DiagnosticsGraphWidget(QWidget):
             head_amplitude_threshold: Minimum amplitude for head cycles (amplitude_threshold param)
             head_max_cycle_gap: Maximum gap between cycles to group them (max_cycle_gap param)
             head_min_oscillations: Minimum oscillations for valid group (min_oscillations param)
-            ear_peak_height: Minimum height for ear peaks (peak_threshold param, used as height)
-            ear_valley_height: Minimum depth for ear valleys (valley_threshold param, used as height)
+            head_use_smoothing: If True, apply Savitzky-Golay smoothing to head signal (use_smoothing param)
+            head_smoothing_window: Window size for Savitzky-Golay filter (smoothing_window param)
+            head_smoothing_polyorder: Polynomial order for Savitzky-Golay filter (smoothing_polyorder param)
+            ear_use_prominence_mode: If True, use prominence-based detection for ears
+            ear_prominence: Prominence value for ear peaks/valleys (used when ear_use_prominence_mode=True)
+            ear_peak_height: Minimum height for ear peaks (peak_threshold param, used when ear_use_prominence_mode=False)
+            ear_valley_height: Minimum depth for ear valleys (valley_threshold param, used when ear_use_prominence_mode=False)
             ear_distance: Minimum distance between ear peaks/valleys (max_gap param)
             ear_quick_gap: Maximum gap for crisscross pairing (quick_gap param)
             ear_between_unit_gap: Maximum gap between crisscrosses to group them (between_unit_gap param)
@@ -489,6 +504,11 @@ class DiagnosticsGraphWidget(QWidget):
             'head_amplitude_threshold': head_amplitude_threshold,
             'head_max_cycle_gap': head_max_cycle_gap,
             'head_min_oscillations': head_min_oscillations,
+            'head_use_smoothing': head_use_smoothing,
+            'head_smoothing_window': head_smoothing_window,
+            'head_smoothing_polyorder': head_smoothing_polyorder,
+            'ear_use_prominence_mode': ear_use_prominence_mode,
+            'ear_prominence': ear_prominence,
             'ear_peak_height': ear_peak_height,
             'ear_valley_height': ear_valley_height,
             'ear_distance': ear_distance,
@@ -525,62 +545,125 @@ class DiagnosticsGraphWidget(QWidget):
 
         # === EAR SIGNALS ===
         # Matches EarsDetector._detect_crisscross_units() logic:
-        # find_peaks(signal, height=peak_threshold, distance=max_gap)
-        # find_peaks(-signal, height=-valley_threshold, distance=max_gap)
+        # If use_prominence_mode: find_peaks(signal, prominence=ear_prominence, distance=max_gap)
+        # Otherwise: find_peaks(signal, height=peak_threshold, distance=max_gap)
 
         ear_distance = self.peak_params['ear_distance']
+        ear_use_prominence = self.peak_params['ear_use_prominence_mode']
+        ear_prominence = self.peak_params['ear_prominence']
         ear_peak_height = self.peak_params['ear_peak_height']
         ear_valley_height = self.peak_params['ear_valley_height']
 
-        # Left ear peaks and valleys
-        try:
-            self.left_ear_peak_indices, _ = find_peaks(
-                left_ear,
-                height=ear_peak_height,
-                distance=ear_distance
-            )
-        except Exception:
-            self.left_ear_peak_indices = np.array([])
+        if ear_use_prominence:
+            # Prominence-based detection (relative movement)
+            # Left ear peaks and valleys
+            try:
+                self.left_ear_peak_indices, _ = find_peaks(
+                    left_ear,
+                    prominence=ear_prominence,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.left_ear_peak_indices = np.array([])
 
-        try:
-            self.left_ear_valley_indices, _ = find_peaks(
-                -left_ear,
-                height=-ear_valley_height,
-                distance=ear_distance
-            )
-        except Exception:
-            self.left_ear_valley_indices = np.array([])
+            try:
+                self.left_ear_valley_indices, _ = find_peaks(
+                    -left_ear,
+                    prominence=ear_prominence,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.left_ear_valley_indices = np.array([])
 
-        # Right ear peaks and valleys
-        try:
-            self.right_ear_peak_indices, _ = find_peaks(
-                right_ear,
-                height=ear_peak_height,
-                distance=ear_distance
-            )
-        except Exception:
-            self.right_ear_peak_indices = np.array([])
+            # Right ear peaks and valleys
+            try:
+                self.right_ear_peak_indices, _ = find_peaks(
+                    right_ear,
+                    prominence=ear_prominence,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.right_ear_peak_indices = np.array([])
 
-        try:
-            self.right_ear_valley_indices, _ = find_peaks(
-                -right_ear,
-                height=-ear_valley_height,
-                distance=ear_distance
-            )
-        except Exception:
-            self.right_ear_valley_indices = np.array([])
+            try:
+                self.right_ear_valley_indices, _ = find_peaks(
+                    -right_ear,
+                    prominence=ear_prominence,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.right_ear_valley_indices = np.array([])
+        else:
+            # Absolute height threshold detection (original method)
+            # Left ear peaks and valleys
+            try:
+                self.left_ear_peak_indices, _ = find_peaks(
+                    left_ear,
+                    height=ear_peak_height,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.left_ear_peak_indices = np.array([])
+
+            try:
+                self.left_ear_valley_indices, _ = find_peaks(
+                    -left_ear,
+                    height=-ear_valley_height,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.left_ear_valley_indices = np.array([])
+
+            # Right ear peaks and valleys
+            try:
+                self.right_ear_peak_indices, _ = find_peaks(
+                    right_ear,
+                    height=ear_peak_height,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.right_ear_peak_indices = np.array([])
+
+            try:
+                self.right_ear_valley_indices, _ = find_peaks(
+                    -right_ear,
+                    height=-ear_valley_height,
+                    distance=ear_distance
+                )
+            except Exception:
+                self.right_ear_valley_indices = np.array([])
 
         # === HEAD SIGNAL ===
-        # Matches HeadDetector._detect_oscillations() logic:
-        # find_peaks(signal, prominence=prom, distance=dist)
-        # find_peaks(-signal, prominence=prom, distance=dist)
+        # Matches HeadDetector logic:
+        # 1. Apply Savitzky-Golay smoothing if use_smoothing=True
+        # 2. find_peaks(signal, prominence=prom, distance=dist)
+        # 3. find_peaks(-signal, prominence=prom, distance=dist)
 
         head_prominence = self.peak_params['head_prominence']
         head_distance = self.peak_params['head_distance']
+        use_smoothing = self.peak_params['head_use_smoothing']
+        smoothing_window = self.peak_params['head_smoothing_window']
+        smoothing_polyorder = self.peak_params['head_smoothing_polyorder']
+
+        # Apply smoothing if enabled (matches HeadDetector._apply_smoothing)
+        if use_smoothing and smoothing_window > smoothing_polyorder and len(head) > smoothing_window:
+            try:
+                self.head_signal_smoothed = savgol_filter(
+                    head,
+                    window_length=smoothing_window,
+                    polyorder=smoothing_polyorder
+                )
+            except Exception:
+                self.head_signal_smoothed = head.copy()
+        else:
+            self.head_signal_smoothed = head.copy()
+
+        # Use smoothed signal for peak detection (matches detector behavior)
+        head_for_peaks = self.head_signal_smoothed
 
         try:
             self.head_peak_indices, _ = find_peaks(
-                head,
+                head_for_peaks,
                 prominence=head_prominence,
                 distance=head_distance
             )
@@ -589,7 +672,7 @@ class DiagnosticsGraphWidget(QWidget):
 
         try:
             self.head_valley_indices, _ = find_peaks(
-                -head,
+                -head_for_peaks,
                 prominence=head_prominence,
                 distance=head_distance
             )
@@ -612,7 +695,11 @@ class DiagnosticsGraphWidget(QWidget):
         if self.signals_df is None:
             return
 
-        head = self.signals_df['head_dist'].values
+        # Use smoothed signal for amplitude calculation (matches detector behavior)
+        if self.head_signal_smoothed is not None:
+            head = self.head_signal_smoothed
+        else:
+            head = self.signals_df['head_dist'].values
         amp_threshold = self.peak_params['head_amplitude_threshold']
 
         # Add buffer around visible range to ensure we have complete cycles at edges

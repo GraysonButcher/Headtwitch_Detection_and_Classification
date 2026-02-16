@@ -152,18 +152,28 @@ class SignalProcessor:
         
         left_distances = []
         right_distances = []
-        
+
         for i in range(len(back_pos)):
+            # Check if any required body part has NaN coordinates for this frame
+            if (np.any(np.isnan(left_ear_pos[i])) or
+                np.any(np.isnan(right_ear_pos[i])) or
+                np.any(np.isnan(back_pos[i])) or
+                np.any(np.isnan(nose_pos[i]))):
+                # Skip this frame - can't calculate valid distances
+                left_distances.append(np.nan)
+                right_distances.append(np.nan)
+                continue
+
             # Find intersection of back-nose line with left-right ear line
             intersection = _line_intersection(back_pos[i], nose_pos[i], left_ear_pos[i], right_ear_pos[i])
-            
+
             if intersection is not None:
                 left_dist = np.linalg.norm(left_ear_pos[i] - intersection)
                 right_dist = np.linalg.norm(right_ear_pos[i] - intersection)
             else:
                 left_dist = np.nan
                 right_dist = np.nan
-            
+
             left_distances.append(left_dist)
             right_distances.append(right_dist)
         
@@ -187,6 +197,14 @@ class SignalProcessor:
         # Calculate perpendicular distances
         distances = []
         for i in range(len(head_pos)):
+            # Check if any required body part has NaN coordinates for this frame
+            if (np.any(np.isnan(head_pos[i])) or
+                np.any(np.isnan(back_pos[i])) or
+                np.any(np.isnan(nose_pos[i]))):
+                # Skip this frame - can't calculate valid distance
+                distances.append(np.nan)
+                continue
+
             dist = point_line_distance(head_pos[i], back_pos[i], nose_pos[i])
             distances.append(dist)
         

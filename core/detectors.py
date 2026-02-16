@@ -53,12 +53,22 @@ class EarsDetector:
         """Detect crisscross patterns in ear distance signals."""
         left_dist = self.left_ear_distances
         right_dist = self.right_ear_distances
-        
+
         # Find peaks and valleys in each ear signal
-        left_peaks, _ = find_peaks(left_dist, height=self.config.peak_threshold, distance=self.config.max_gap)
-        right_peaks, _ = find_peaks(right_dist, height=self.config.peak_threshold, distance=self.config.max_gap)
-        left_valleys, _ = find_peaks(-left_dist, height=-self.config.valley_threshold, distance=self.config.max_gap)
-        right_valleys, _ = find_peaks(-right_dist, height=-self.config.valley_threshold, distance=self.config.max_gap)
+        # Use prominence-based or absolute height detection based on config
+        if self.config.use_prominence_mode:
+            # Prominence-based detection (relative movement)
+            prom = self.config.ear_prominence
+            left_peaks, _ = find_peaks(left_dist, prominence=prom, distance=self.config.max_gap)
+            right_peaks, _ = find_peaks(right_dist, prominence=prom, distance=self.config.max_gap)
+            left_valleys, _ = find_peaks(-left_dist, prominence=prom, distance=self.config.max_gap)
+            right_valleys, _ = find_peaks(-right_dist, prominence=prom, distance=self.config.max_gap)
+        else:
+            # Absolute height threshold detection (original method)
+            left_peaks, _ = find_peaks(left_dist, height=self.config.peak_threshold, distance=self.config.max_gap)
+            right_peaks, _ = find_peaks(right_dist, height=self.config.peak_threshold, distance=self.config.max_gap)
+            left_valleys, _ = find_peaks(-left_dist, height=-self.config.valley_threshold, distance=self.config.max_gap)
+            right_valleys, _ = find_peaks(-right_dist, height=-self.config.valley_threshold, distance=self.config.max_gap)
         
         # Combine all events with their types and values
         all_events = sorted([

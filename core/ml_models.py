@@ -164,7 +164,10 @@ class HTRClassifier:
                 raise
         else:
             # Fallback: exclude known metadata columns
-            metadata_cols = ['ground_truth', 'rat_id', 'dose', 'start_frame', 'end_frame', 'prediction', 'prediction_confidence']
+            metadata_cols = [
+                'ground_truth', 'rat_id', 'dose', 'drug', 'cohort', 'source_file',
+                'start_frame', 'end_frame', 'prediction', 'prediction_confidence'
+            ]
             feature_cols = [col for col in X.columns if col not in metadata_cols]
             X_filtered = X[feature_cols]
             print(f"  Using {len(feature_cols)} columns (excluded metadata columns)")
@@ -678,8 +681,12 @@ class ModelTrainer:
                     'error': f'Missing required columns in ground truth CSV: {missing_cols}'
                 }
             
-            # Split features and labels
-            feature_cols = [col for col in ground_truth_df.columns if col not in ['ground_truth', 'rat_id', 'start_frame', 'end_frame']]
+            # Split features and labels (exclude metadata columns)
+            metadata_cols = [
+                'ground_truth', 'rat_id', 'dose', 'drug', 'cohort', 'source_file',
+                'start_frame', 'end_frame', 'prediction', 'prediction_confidence'
+            ]
+            feature_cols = [col for col in ground_truth_df.columns if col not in metadata_cols]
             
             if not feature_cols:
                 return {

@@ -21,15 +21,17 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDateTime, Signal
 from PySide6.QtGui import QFont
 
-# Import workflow tracker
+# Import workflow tracker and metadata dialog
 try:
     from .workflow_tracker import WorkflowTracker
+    from .metadata_config_dialog import MetadataConfigDialog
 except ImportError:
     import sys
     import os
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, current_dir)
     from workflow_tracker import WorkflowTracker
+    from metadata_config_dialog import MetadataConfigDialog
 
 
 class DeployTab(QWidget):
@@ -185,6 +187,12 @@ class DeployTab(QWidget):
         param_layout.addWidget(self.param_browse_btn)
 
         config_layout.addLayout(param_layout)
+
+        # Ear detection mode indicator
+        self.ear_mode_label = QLabel("Ear Detection: Absolute Mode")
+        self.ear_mode_label.setFont(QFont("Arial", 8))
+        self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+        config_layout.addWidget(self.ear_mode_label)
 
         parent_layout.addWidget(config_group)
 
@@ -435,11 +443,13 @@ class DeployTab(QWidget):
             self.param_path_edit.setStyleSheet("QLineEdit { background-color: #e8f5e9; }")
             self.param_browse_btn.setText("Replace...")
             self.show_progress(f"✓ Auto-loaded parameter file: {filename}")
+            self._update_ear_mode_label()
         else:
             self.param_path_edit.clear()
             self.param_path_edit.setProperty("full_path", "")
             self.param_path_edit.setStyleSheet("")
             self.param_browse_btn.setText("Browse...")
+            self._update_ear_mode_label()
 
     def browse_model(self):
         """Browse for model file and copy to project."""
@@ -601,6 +611,14 @@ class DeployTab(QWidget):
         if reply != QMessageBox.Yes:
             return
 
+        # Show metadata configuration dialog
+        input_folder = os.path.join(project_path, "input")
+        metadata_dialog = MetadataConfigDialog(input_folder, self)
+        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+            return  # User cancelled
+
+        metadata_config = metadata_dialog.get_config()
+
         # Run pipeline
         self.show_progress("🚀 Starting full pipeline...")
         self.progress_bar.setVisible(True)
@@ -609,7 +627,7 @@ class DeployTab(QWidget):
         try:
             # Step 1: Extract features
             self.show_progress("📦 Step 1/3: Extracting features...")
-            extract_success = self._extract_features_internal(mode)
+            extract_success = self._extract_features_internal(mode, metadata_config)
 
             if not extract_success:
                 self.show_progress("❌ Pipeline failed at feature extraction")
@@ -660,8 +678,22 @@ class DeployTab(QWidget):
         if not self.validate_prerequisites(require_model=False):
             return
 
+        # Get project path for input folder
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        # Show metadata configuration dialog
+        input_folder = os.path.join(project_path, "input")
+        metadata_dialog = MetadataConfigDialog(input_folder, self)
+        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+            return  # User cancelled
+
+        metadata_config = metadata_dialog.get_config()
+
         mode = "incremental" if self.incremental_mode_radio.isChecked() else "fresh"
-        success = self._extract_features_internal(mode)
+        success = self._extract_features_internal(mode, metadata_config)
 
         if success:
             self.refresh_status()
@@ -713,8 +745,13 @@ class DeployTab(QWidget):
 
         return True
 
-    def _extract_features_internal(self, mode='fresh'):
-        """Internal method to extract features."""
+    def _extract_features_internal(self, mode='fresh', metadata_config=None):
+        """Internal method to extract features.
+
+        Args:
+            mode: 'fresh' to process all files, 'incremental' to process only new files
+            metadata_config: Optional MetadataConfig for extracting metadata from file paths
+        """
         try:
             project_path, _ = self.project_manager.get_current_project()
 
@@ -739,6 +776,12 @@ class DeployTab(QWidget):
             features_folder = os.path.join(project_path, "features")
             os.makedirs(features_folder, exist_ok=True)
 
+            # Log metadata configuration
+            if metadata_config:
+                self.show_progress(f"Metadata extraction configured: {list(metadata_config.folder_mappings.values())}")
+            else:
+                self.show_progress("No metadata extraction (using original filenames)")
+
             # Determine files to process based on mode
             if mode == 'incremental':
                 new_h5_files, _ = self.workflow_tracker.detect_new_h5_files()
@@ -752,29 +795,31 @@ class DeployTab(QWidget):
                 h5_files_to_process = glob.glob(os.path.join(input_folder, "**", "*.h5"), recursive=True)
                 self.show_progress(f"Processing all {len(h5_files_to_process)} H5 files...")
 
-            # Create batch extractor
+            # Create batch extractor with optional metadata config
             batch_extractor = BatchFeatureExtractor(
                 ear_config=config_manager.config.ear_detector,
                 head_config=config_manager.config.head_detector,
                 node_mapping=config_manager.config.node_mapping,
-                fps=config_manager.config.default_fps
+                fps=config_manager.config.default_fps,
+                metadata_config=metadata_config
             )
 
             # Process files
             files_processed = 0
             for h5_file in h5_files_to_process:
                 try:
-                    base_name = os.path.splitext(os.path.basename(h5_file))[0]
-                    output_path = os.path.join(features_folder, f"{base_name}_htr_features.csv")
+                    # Use extractor's method for output filename (handles metadata if configured)
+                    output_filename = batch_extractor.get_output_filename(h5_file)
+                    output_path = os.path.join(features_folder, output_filename)
 
-                    self.show_progress(f"Processing: {base_name}")
+                    self.show_progress(f"Processing: {os.path.basename(h5_file)}")
                     features_df = batch_extractor.process_file(h5_file, output_path)
 
                     if not features_df.empty:
                         files_processed += 1
-                        self.show_progress(f"✓ {base_name}: {len(features_df)} features extracted")
+                        self.show_progress(f"✓ {output_filename}: {len(features_df)} features extracted")
                     else:
-                        self.show_progress(f"⚠ {base_name}: No features found")
+                        self.show_progress(f"⚠ {output_filename}: No features found")
 
                 except Exception as e:
                     self.show_progress(f"✗ Error with {os.path.basename(h5_file)}: {str(e)}")
@@ -1361,6 +1406,23 @@ class DeployTab(QWidget):
                 "Error",
                 f"Could not load HTR details:\n{str(e)}"
             )
+
+    def _update_ear_mode_label(self):
+        """Update the ear detection mode label based on current config."""
+        try:
+            from core.config import get_config_manager
+            config_manager = get_config_manager()
+            if config_manager and config_manager.config:
+                use_prominence = config_manager.config.ear_detector.use_prominence_mode
+                if use_prominence:
+                    self.ear_mode_label.setText("Ear Detection: Prominence Mode")
+                    self.ear_mode_label.setStyleSheet("color: #1565c0; font-weight: bold; padding: 2px 0;")
+                else:
+                    self.ear_mode_label.setText("Ear Detection: Absolute Mode")
+                    self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+        except Exception:
+            self.ear_mode_label.setText("Ear Detection: Absolute Mode")
+            self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
 
     def show_progress(self, message):
         """Show progress message."""

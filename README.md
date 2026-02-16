@@ -11,7 +11,7 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
 ## Prerequisites
 
 **Software:**
-- Python 3.9 or higher
+- Python 3.9 (specifically – other versions may have compatibility issues)
 - Windows 10/11, macOS 10.14+, or Linux
 
 **Data Requirements:**
@@ -32,16 +32,49 @@ A comprehensive desktop application for detecting and analyzing Head-Twitch Resp
 
 ## Quick Install
 
+> **Important:** Use **Python 3.9** specifically. Other versions may cause dependency issues.
+
+### Step 1: Get the Code
+
+**Option A – With GitHub account (can receive updates):**
 ```bash
 git clone https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification.git
 cd Headtwitch_Detection_and_Classification
-python -m venv htr_env
-htr_env\Scripts\activate  # On Windows
-pip install -e .
-hdac  # Launch the application
 ```
 
-👉 **[Full installation guide with all options →](docs/installation.md)** (conda, manual setup, troubleshooting)
+**Option B – Without GitHub account:**
+1. Download ZIP from: [Download ZIP](https://github.com/GraysonButcher/Headtwitch_Detection_and_Classification/archive/refs/heads/main.zip)
+2. Extract and open a terminal in that folder
+
+### Step 2: Set Up Environment
+
+**Option A – Using Conda/Miniforge/Mambaforge (recommended):**
+```bash
+mamba create -n htr_env python=3.9 -y   # or: conda create -n htr_env python=3.9 -y
+mamba activate htr_env                   # or: conda activate htr_env
+pip install -r requirements.txt
+```
+
+**Option B – Using Python venv (requires Python 3.9 already installed):**
+```bash
+python -m venv htr_env
+htr_env\Scripts\activate      # Windows
+# source htr_env/bin/activate  # macOS/Linux
+pip install -r requirements.txt
+```
+
+### Step 3: Launch
+```bash
+python -m hdac
+```
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `python` not found | Use conda/mamba approach, or install Python 3.9 from [python.org](https://python.org) and check "Add to PATH" |
+| Lockfile error in conda/mamba | Run terminal as Administrator, or run `mamba clean --locks` |
+| App won't start on Python 3.10+ | Use Python 3.9 instead |
 
 ---
 
