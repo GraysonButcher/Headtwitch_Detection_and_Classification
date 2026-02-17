@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
+from .theme import Fonts, Colors, stylesheet_button_primary, stylesheet_button_success
 
 import sys
 import os
@@ -38,7 +39,8 @@ class ProjectDialog(QDialog):
         else:
             self.setWindowTitle(f"HTR Project - {workflow_type.title()} Workflow")
 
-        self.setFixedSize(600, 400)
+        self.setMinimumSize(500, 350)
+        self.resize(600, 400)
         self.init_ui()
         
     def init_ui(self):
@@ -50,7 +52,7 @@ class ProjectDialog(QDialog):
         # Title (only show if mode is "both")
         if self.mode == "both":
             title_label = QLabel(f"HTR Analysis Project - {self.workflow_type.title()} Workflow")
-            title_label.setFont(QFont("Arial", 14, QFont.Bold))
+            title_label.setFont(QFont(Fonts.FAMILY, 14, QFont.Bold))
             title_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(title_label)
 
@@ -68,9 +70,9 @@ class ProjectDialog(QDialog):
             desc_text = desc_text.get(self.workflow_type, "Create or open an HTR analysis project.")
 
         desc_label = QLabel(desc_text)
-        desc_label.setFont(QFont("Arial", 10))
+        desc_label.setFont(QFont(Fonts.FAMILY, 10))
         desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("color: #6c757d; margin-bottom: 10px;")
+        desc_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; margin-bottom: 10px;")
         layout.addWidget(desc_label)
 
         # Create new project section (only if mode is "create" or "both")
@@ -102,19 +104,7 @@ class ProjectDialog(QDialog):
 
             # Create button
             create_btn = QPushButton("Create Project")
-            create_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #28a745;
-                    color: white;
-                    border: none;
-                    padding: 10px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #218838;
-                }
-            """)
+            create_btn.setStyleSheet(stylesheet_button_success())
             create_btn.clicked.connect(self.create_project)
             create_layout.addWidget(create_btn)
 
@@ -141,19 +131,7 @@ class ProjectDialog(QDialog):
 
             # Open button
             open_btn = QPushButton("Open Project")
-            open_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #007bff;
-                    color: white;
-                    border: none;
-                    padding: 10px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #0056b3;
-                }
-            """)
+            open_btn.setStyleSheet(stylesheet_button_primary())
             open_btn.clicked.connect(self.open_project)
             open_layout.addWidget(open_btn)
 

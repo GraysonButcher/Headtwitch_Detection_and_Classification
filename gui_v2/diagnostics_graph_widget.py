@@ -10,6 +10,7 @@ import numpy as np
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QSizePolicy
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
+from .theme import Fonts
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -108,7 +109,7 @@ class DiagnosticsGraphWidget(QWidget):
         controls_layout.setContentsMargins(5, 2, 5, 2)
 
         self.show_peaks_checkbox = QCheckBox("Show Peaks/Valleys")
-        self.show_peaks_checkbox.setFont(QFont("Arial", 8))
+        self.show_peaks_checkbox.setFont(QFont(Fonts.FAMILY, 8))
         self.show_peaks_checkbox.setToolTip(
             "Show detected peaks and valleys on signal lines.\n"
             "Filled circles = peaks, hollow circles = valleys.\n"
@@ -122,7 +123,7 @@ class DiagnosticsGraphWidget(QWidget):
         controls_layout.addWidget(self.show_peaks_checkbox)
 
         self.show_cycles_checkbox = QCheckBox("Show Cycle Lines")
-        self.show_cycles_checkbox.setFont(QFont("Arial", 8))
+        self.show_cycles_checkbox.setFont(QFont(Fonts.FAMILY, 8))
         self.show_cycles_checkbox.setToolTip(
             "Draw connector lines between peak-valley pairs (cycles).\n"
             "Green line = cycle amplitude passes Amp Thresh\n"
@@ -134,7 +135,7 @@ class DiagnosticsGraphWidget(QWidget):
         controls_layout.addWidget(self.show_cycles_checkbox)
 
         self.show_osc_numbers_checkbox = QCheckBox("Show Osc #")
-        self.show_osc_numbers_checkbox.setFont(QFont("Arial", 8))
+        self.show_osc_numbers_checkbox.setFont(QFont(Fonts.FAMILY, 8))
         self.show_osc_numbers_checkbox.setToolTip(
             "Show oscillation numbers within groups.\n"
             "Each cycle in a group is numbered (1, 2, 3...).\n"

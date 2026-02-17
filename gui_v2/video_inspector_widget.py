@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage, QPixmap, QFont, QIntValidator
+from .theme import Fonts, get_icon
 
 from .node_mapping_dialog import NodeMappingDialog
 from .detection_utils import (
@@ -101,14 +102,16 @@ class VideoInspectorWidget(QWidget):
         """Create file loading buttons."""
         file_layout = QHBoxLayout()
 
-        self.load_h5_btn = QPushButton("📁 Load H5 File...")
-        self.load_h5_btn.setFont(QFont("Arial", 9))
+        self.load_h5_btn = QPushButton("Load H5 File...")
+        self.load_h5_btn.setIcon(get_icon('open'))
+        self.load_h5_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.load_h5_btn.setToolTip("Load SLEAP tracking data (.h5 file)")
         self.load_h5_btn.clicked.connect(self.load_h5_file)
         file_layout.addWidget(self.load_h5_btn)
 
-        self.load_video_btn = QPushButton("🎬 Load Video...")
-        self.load_video_btn.setFont(QFont("Arial", 9))
+        self.load_video_btn = QPushButton("Load Video...")
+        self.load_video_btn.setIcon(get_icon('play'))
+        self.load_video_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.load_video_btn.setToolTip("Load video file (.mp4, .avi, etc.)")
         self.load_video_btn.clicked.connect(self.load_video_file)
         file_layout.addWidget(self.load_video_btn)
@@ -146,7 +149,7 @@ class VideoInspectorWidget(QWidget):
         # Frame display
         self.frame_display = QLabel("Frame: 0 / 0")
         self.frame_display.setAlignment(Qt.AlignCenter)
-        self.frame_display.setFont(QFont("Arial", 9))
+        self.frame_display.setFont(QFont(Fonts.FAMILY, 9))
         self.frame_display.setMinimumWidth(120)
         nav_layout.addWidget(self.frame_display)
 
@@ -167,7 +170,7 @@ class VideoInspectorWidget(QWidget):
 
         # Jump to frame
         jump_label = QLabel("Go to:")
-        jump_label.setFont(QFont("Arial", 9))
+        jump_label.setFont(QFont(Fonts.FAMILY, 9))
         nav_layout.addWidget(jump_label)
 
         self.jump_input = QLineEdit()

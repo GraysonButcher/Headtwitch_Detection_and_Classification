@@ -12,6 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gui_v2.main_window import HTRAnalysisAppV3
+from gui_v2.theme import get_app_stylesheet
 from PySide6.QtWidgets import QApplication
 
 
@@ -26,6 +27,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("H-DaC v3")
     app.setOrganizationName("H-DaC")
+    app.setStyleSheet(get_app_stylesheet())
 
     window = HTRAnalysisAppV3()
     window.show()

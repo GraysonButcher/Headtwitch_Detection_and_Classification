@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QSplitter, QScrollArea, QCheckBox
 )
 from PySide6.QtCore import Qt, QDateTime
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QFont, QPixmap, QShortcut, QKeySequence
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -58,6 +58,11 @@ except ImportError:
     from project_manager import ProjectManager
     from video_inspector_widget import VideoInspectorWidget
     from diagnostics_graph_widget import DiagnosticsGraphWidget
+
+try:
+    from .theme import Colors, Fonts, Spacing, get_icon, stylesheet_button_success, stylesheet_button_primary, stylesheet_status_info, stylesheet_status_warning, stylesheet_status_success, stylesheet_status_dynamic, stylesheet_log_area, stylesheet_separator
+except ImportError:
+    from theme import Colors, Fonts, Spacing, get_icon, stylesheet_button_success, stylesheet_button_primary, stylesheet_status_info, stylesheet_status_warning, stylesheet_status_success, stylesheet_status_dynamic, stylesheet_log_area, stylesheet_separator
 
 
 class CachedDataLoader:
@@ -115,7 +120,8 @@ class HTRAnalysisAppV3(QMainWindow):
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("HTR Analysis Tool v3")
-        self.setFixedSize(1400, 750)
+        self.setMinimumSize(1200, 700)
+        self.resize(1400, 750)
 
         # Create menu bar
         self.create_menu_bar()
@@ -131,7 +137,7 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Create tab widget
         self.tab_widget = QTabWidget()
-        self.tab_widget.setMaximumHeight(700)
+        # Tab widget fills available space (no max height constraint)
         layout.addWidget(self.tab_widget)
 
         # Create tabs
@@ -139,8 +145,13 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Create status bar
         self.status_bar = self.statusBar()
+        self.status_message_label = QLabel("Ready")
+        self.status_bar.addWidget(self.status_message_label)
         self.project_status_label = QLabel("No project loaded")
         self.status_bar.addPermanentWidget(self.project_status_label)
+
+        # Set up keyboard shortcuts for tab navigation
+        self.setup_keyboard_shortcuts()
 
         # Initialize project manager
         try:
@@ -173,6 +184,20 @@ class HTRAnalysisAppV3(QMainWindow):
         exit_action = file_menu.addAction("Exit")
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
+
+        # View menu — tab navigation
+        view_menu = menubar.addMenu("&View")
+
+        tab_names = [
+            ("1. Welcome", "Ctrl+1"),
+            ("2. Tune Parameters", "Ctrl+2"),
+            ("3. Prepare Data", "Ctrl+3"),
+            ("4. Train Model", "Ctrl+4"),
+            ("5. Identify Headtwitches", "Ctrl+5"),
+        ]
+        for idx, (name, shortcut) in enumerate(tab_names):
+            action = view_menu.addAction(f"{name}\t{shortcut}")
+            action.triggered.connect(lambda checked, i=idx: self.switch_to_tab(i))
 
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -257,43 +282,37 @@ class HTRAnalysisAppV3(QMainWindow):
             self.welcome_tab.prepare_data_requested.connect(lambda: self.switch_to_tab(2))
             self.welcome_tab.train_model_requested.connect(lambda: self.switch_to_tab(3))
             self.welcome_tab.deploy_requested.connect(lambda: self.switch_to_tab(4))
-            self.tab_widget.addTab(self.welcome_tab, "Welcome")
+            self.tab_widget.addTab(self.welcome_tab, "1. Welcome")
         except Exception as e:
             # Fallback if welcome tab fails
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Welcome Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Welcome")
+            self.tab_widget.addTab(fallback_widget, "1. Welcome")
 
     def create_tune_parameters_tab(self):
         """Tab 2: Tune Parameters with video feedback."""
-        param_widget = QWidget()
-        param_layout = QHBoxLayout(param_widget)
-        param_layout.setContentsMargins(5, 5, 5, 5)
-        param_layout.setSpacing(10)
+        # Use a horizontal splitter so user can resize video vs graph/params
+        h_splitter = QSplitter(Qt.Horizontal)
+        h_splitter.setContentsMargins(5, 5, 5, 5)
 
-        # LEFT SIDE: Video Inspector (690px)
+        # LEFT SIDE: Video Inspector
         try:
             self.video_inspector = VideoInspectorWidget(parent=self)
-            self.video_inspector.setMaximumWidth(690)
-            param_layout.addWidget(self.video_inspector)
+            h_splitter.addWidget(self.video_inspector)
         except Exception as e:
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Video Inspector Error: {str(e)}"))
-            fallback_widget.setMaximumWidth(690)
-            param_layout.addWidget(fallback_widget)
+            h_splitter.addWidget(fallback_widget)
             self.video_inspector = None
 
-        # RIGHT SIDE: Resizable Graph + Parameter Panel (690px)
-        # Use QSplitter for user-adjustable sizing
+        # RIGHT SIDE: Vertical splitter for Graph + Parameter Panel
         right_splitter = QSplitter(Qt.Vertical)
-        right_splitter.setMaximumWidth(690)
 
         # Top: Diagnostics Graph (resizable)
         try:
             self.diagnostics_graph = DiagnosticsGraphWidget(parent=self)
-            # Remove fixed height - splitter will handle sizing
             right_splitter.addWidget(self.diagnostics_graph)
         except Exception as e:
             fallback_label = QLabel(f"Graph Widget Error: {str(e)}")
@@ -311,11 +330,13 @@ class HTRAnalysisAppV3(QMainWindow):
             right_splitter.addWidget(fallback_label)
             self.parameter_panel = None
 
-        # Set initial sizes: Give graph ~455px, parameters ~245px (total 700px)
-        # This gives the graph significantly more space than before
+        # Set initial sizes for vertical splitter: graph ~455px, parameters ~245px
         right_splitter.setSizes([455, 245])
 
-        param_layout.addWidget(right_splitter)
+        h_splitter.addWidget(right_splitter)
+
+        # Set initial sizes for horizontal splitter: video ~690px, right ~690px
+        h_splitter.setSizes([690, 690])
 
         # WIRE UP SIGNALS
         if self.video_inspector and self.diagnostics_graph and self.parameter_panel:
@@ -330,7 +351,7 @@ class HTRAnalysisAppV3(QMainWindow):
             self.parameter_panel.reanalyze_view_requested.connect(self.reanalyze_current_view)
             self.parameter_panel.reanalyze_full_requested.connect(self.reanalyze_full_video)
 
-        self.tab_widget.addTab(param_widget, "Tune Parameters")
+        self.tab_widget.addTab(h_splitter, "2. Tune Parameters")
 
     def create_prepare_data_tab(self):
         """Tab 3: Prepare Data - Feature extraction + Ground truth labeling."""
@@ -339,13 +360,13 @@ class HTRAnalysisAppV3(QMainWindow):
             # Connect signals
             self.prepare_data_tab.features_extracted.connect(self.on_features_extracted)
             self.prepare_data_tab.labels_updated.connect(self.on_labels_updated)
-            self.tab_widget.addTab(self.prepare_data_tab, "Prepare Data")
+            self.tab_widget.addTab(self.prepare_data_tab, "3. Prepare Data")
         except Exception as e:
             # Fallback
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Prepare Data Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Prepare Data")
+            self.tab_widget.addTab(fallback_widget, "3. Prepare Data")
 
     def create_train_model_tab(self):
         """Tab 4: Train Model with evaluation and iteration."""
@@ -359,7 +380,7 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Separator
         separator = QLabel()
-        separator.setStyleSheet("background-color: #dee2e6; min-height: 2px; max-height: 2px;")
+        separator.setStyleSheet(stylesheet_separator())
         layout.addWidget(separator)
 
         # Section B: Evaluate & Iterate (NEW)
@@ -370,34 +391,33 @@ class HTRAnalysisAppV3(QMainWindow):
 
         layout.addStretch()
 
-        self.tab_widget.addTab(training_widget, "Train Model")
+        self.tab_widget.addTab(training_widget, "4. Train Model")
 
     def create_training_config_section(self, parent_layout):
         """Training configuration section."""
         config_group = QGroupBox("Configure & Train Model")
-        config_group.setFont(QFont("Arial", 10, QFont.Bold))
+        config_group.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
         config_layout = QVBoxLayout(config_group)
         config_layout.setContentsMargins(10, 15, 10, 10)
         config_layout.setSpacing(10)
 
         # Training data status display
         self.training_status_label = QLabel("Loading training data...")
-        self.training_status_label.setFont(QFont("Arial", 9))
+        self.training_status_label.setFont(QFont(Fonts.FAMILY, 9))
         self.training_status_label.setWordWrap(True)
-        self.training_status_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 10px; border-radius: 4px;"
-        )
+        self.training_status_label.setStyleSheet(stylesheet_status_info())
         config_layout.addWidget(self.training_status_label)
 
         # Refresh button
-        refresh_training_btn = QPushButton("🔄 Refresh Training Data")
-        refresh_training_btn.setFont(QFont("Arial", 9))
+        refresh_training_btn = QPushButton("Refresh Training Data")
+        refresh_training_btn.setIcon(get_icon('reload'))
+        refresh_training_btn.setFont(QFont(Fonts.FAMILY, 9))
         refresh_training_btn.clicked.connect(self.refresh_training_status)
         config_layout.addWidget(refresh_training_btn)
 
         # Feature Selection group
         feature_sel_group = QGroupBox("Feature Selection")
-        feature_sel_group.setFont(QFont("Arial", 9))
+        feature_sel_group.setFont(QFont(Fonts.FAMILY, 9))
         feature_sel_layout = QVBoxLayout(feature_sel_group)
         feature_sel_layout.setContentsMargins(8, 10, 8, 8)
         feature_sel_layout.setSpacing(4)
@@ -405,19 +425,19 @@ class HTRAnalysisAppV3(QMainWindow):
         # Buttons row + count label
         feat_btn_layout = QHBoxLayout()
         self.feat_select_all_btn = QPushButton("Select All")
-        self.feat_select_all_btn.setFont(QFont("Arial", 8))
+        self.feat_select_all_btn.setFont(QFont(Fonts.FAMILY, 8))
         self.feat_select_all_btn.setMaximumWidth(80)
         self.feat_select_all_btn.clicked.connect(self._select_all_features)
         feat_btn_layout.addWidget(self.feat_select_all_btn)
 
         self.feat_deselect_all_btn = QPushButton("Deselect All")
-        self.feat_deselect_all_btn.setFont(QFont("Arial", 8))
+        self.feat_deselect_all_btn.setFont(QFont(Fonts.FAMILY, 8))
         self.feat_deselect_all_btn.setMaximumWidth(80)
         self.feat_deselect_all_btn.clicked.connect(self._deselect_all_features)
         feat_btn_layout.addWidget(self.feat_deselect_all_btn)
 
         self.feature_count_label = QLabel("No features loaded")
-        self.feature_count_label.setFont(QFont("Arial", 8))
+        self.feature_count_label.setFont(QFont(Fonts.FAMILY, 8))
         feat_btn_layout.addWidget(self.feature_count_label)
         feat_btn_layout.addStretch()
         feature_sel_layout.addLayout(feat_btn_layout)
@@ -441,12 +461,12 @@ class HTRAnalysisAppV3(QMainWindow):
         param_layout = QHBoxLayout()
         param_label = QLabel("Parameters:")
         param_label.setMinimumWidth(120)
-        param_label.setFont(QFont("Arial", 9))
+        param_label.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(param_label)
 
         self.training_param_edit = QLineEdit()
         self.training_param_edit.setPlaceholderText("Optional: Parameter configuration")
-        self.training_param_edit.setFont(QFont("Arial", 9))
+        self.training_param_edit.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(self.training_param_edit)
 
         browse_param_btn = QPushButton("Browse...")
@@ -459,23 +479,10 @@ class HTRAnalysisAppV3(QMainWindow):
         # Train button
         train_layout = QHBoxLayout()
 
-        self.train_model_btn = QPushButton("🧠 Train Model")
-        self.train_model_btn.setFont(QFont("Arial", 10, QFont.Bold))
-        self.train_model_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.train_model_btn = QPushButton("Train Model")
+        self.train_model_btn.setIcon(get_icon('computer'))
+        self.train_model_btn.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
+        self.train_model_btn.setStyleSheet(stylesheet_button_success())
         self.train_model_btn.clicked.connect(self.train_model)
         train_layout.addWidget(self.train_model_btn)
 
@@ -488,7 +495,7 @@ class HTRAnalysisAppV3(QMainWindow):
     def create_training_evaluate_section(self, parent_layout):
         """Training evaluation and iteration section."""
         eval_group = QGroupBox("Evaluate & Iterate")
-        eval_group.setFont(QFont("Arial", 10, QFont.Bold))
+        eval_group.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
         eval_layout = QVBoxLayout(eval_group)
         eval_layout.setContentsMargins(10, 15, 10, 10)
         eval_layout.setSpacing(10)
@@ -498,52 +505,55 @@ class HTRAnalysisAppV3(QMainWindow):
             "<b>Review model performance:</b> "
             "Analyze misclassified events, fix labels, and retrain to improve accuracy."
         )
-        instructions.setFont(QFont("Arial", 9))
+        instructions.setFont(QFont(Fonts.FAMILY, 9))
         instructions.setWordWrap(True)
         eval_layout.addWidget(instructions)
 
         # Metrics display
         self.metrics_label = QLabel("Train a model to see performance metrics")
-        self.metrics_label.setFont(QFont("Arial", 9))
-        self.metrics_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 8px; border-radius: 4px; color: #6c757d;"
-        )
+        self.metrics_label.setFont(QFont(Fonts.FAMILY, 9))
+        self.metrics_label.setStyleSheet(stylesheet_status_info())
         eval_layout.addWidget(self.metrics_label)
 
         # Misclassified events section
         misclass_layout = QHBoxLayout()
 
         # Load misclassified button
-        self.load_misclass_btn = QPushButton("📊 Load Misclassified Events")
-        self.load_misclass_btn.setFont(QFont("Arial", 9))
+        self.load_misclass_btn = QPushButton("Load Misclassified Events")
+        self.load_misclass_btn.setIcon(get_icon('chart'))
+        self.load_misclass_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.load_misclass_btn.clicked.connect(self.load_misclassified_events)
         self.load_misclass_btn.setEnabled(False)
         misclass_layout.addWidget(self.load_misclass_btn)
 
         # View confusion matrix button
-        self.view_confusion_btn = QPushButton("📈 View Confusion Matrix")
-        self.view_confusion_btn.setFont(QFont("Arial", 9))
+        self.view_confusion_btn = QPushButton("View Confusion Matrix")
+        self.view_confusion_btn.setIcon(get_icon('chart'))
+        self.view_confusion_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_confusion_btn.clicked.connect(self.view_confusion_matrix)
         self.view_confusion_btn.setEnabled(False)
         misclass_layout.addWidget(self.view_confusion_btn)
 
         # View feature importance button
-        self.view_importance_btn = QPushButton("📊 View Feature Importance")
-        self.view_importance_btn.setFont(QFont("Arial", 9))
+        self.view_importance_btn = QPushButton("View Feature Importance")
+        self.view_importance_btn.setIcon(get_icon('chart'))
+        self.view_importance_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_importance_btn.clicked.connect(self.view_feature_importance)
         self.view_importance_btn.setEnabled(False)
         misclass_layout.addWidget(self.view_importance_btn)
 
         # View threshold curve button
-        self.view_threshold_btn = QPushButton("📉 View Threshold Curve")
-        self.view_threshold_btn.setFont(QFont("Arial", 9))
+        self.view_threshold_btn = QPushButton("View Threshold Curve")
+        self.view_threshold_btn.setIcon(get_icon('chart'))
+        self.view_threshold_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_threshold_btn.clicked.connect(self.view_threshold_curve)
         self.view_threshold_btn.setEnabled(False)
         misclass_layout.addWidget(self.view_threshold_btn)
 
         # View SHAP analysis button
-        self.view_shap_btn = QPushButton("🔍 View SHAP Analysis")
-        self.view_shap_btn.setFont(QFont("Arial", 9))
+        self.view_shap_btn = QPushButton("View SHAP Analysis")
+        self.view_shap_btn.setIcon(get_icon('search'))
+        self.view_shap_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_shap_btn.clicked.connect(self.view_shap_analysis)
         self.view_shap_btn.setEnabled(False)
         misclass_layout.addWidget(self.view_shap_btn)
@@ -580,16 +590,10 @@ class HTRAnalysisAppV3(QMainWindow):
         # Results text
         self.training_results_text = QTextEdit()
         self.training_results_text.setMaximumHeight(100)
-        self.training_results_text.setFont(QFont("Consolas", 8))
+        self.training_results_text.setFont(QFont(Fonts.MONO_FAMILY, 8))
         self.training_results_text.setReadOnly(True)
         self.training_results_text.setPlaceholderText("Training progress will appear here...")
-        self.training_results_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                color: #495057;
-            }
-        """)
+        self.training_results_text.setStyleSheet(stylesheet_log_area())
         progress_layout.addWidget(self.training_results_text)
 
         parent_layout.addWidget(progress_group)
@@ -600,15 +604,21 @@ class HTRAnalysisAppV3(QMainWindow):
             self.deploy_tab = DeployTab(parent=self, project_manager=self.project_manager)
             # Connect signals
             self.deploy_tab.processing_complete.connect(self.on_processing_complete)
-            self.tab_widget.addTab(self.deploy_tab, "Identify Headtwitches")
+            self.tab_widget.addTab(self.deploy_tab, "5. Identify Headtwitches")
         except Exception as e:
             # Fallback
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Identify Headtwitches Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Identify Headtwitches")
+            self.tab_widget.addTab(fallback_widget, "5. Identify Headtwitches")
 
     # ==================== Tab Navigation ====================
+
+    def setup_keyboard_shortcuts(self):
+        """Set up Ctrl+1 through Ctrl+5 for tab navigation."""
+        for i in range(5):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{i+1}"), self)
+            shortcut.activated.connect(lambda idx=i: self.switch_to_tab(idx))
 
     def switch_to_tab(self, index):
         """Switch to specified tab index."""
@@ -953,7 +963,7 @@ class HTRAnalysisAppV3(QMainWindow):
         # Create checkboxes
         for col_name in all_feature_cols:
             cb = QCheckBox(col_name)
-            cb.setFont(QFont("Arial", 8))
+            cb.setFont(QFont(Fonts.FAMILY, 8))
             if saved_selection is not None:
                 cb.setChecked(col_name in saved_selection)
             else:
@@ -968,14 +978,14 @@ class HTRAnalysisAppV3(QMainWindow):
         """Scan training folder and display statistics with guidance."""
         if not self.project_manager:
             self.training_status_label.setText("⚠ No project loaded.")
-            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.training_status_label.setStyleSheet(stylesheet_status_warning())
             self.train_model_btn.setEnabled(False)
             return
 
         project_path, project_config = self.project_manager.get_current_project()
         if not project_path:
             self.training_status_label.setText("⚠ No project loaded.")
-            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.training_status_label.setStyleSheet(stylesheet_status_warning())
             self.train_model_btn.setEnabled(False)
             return
 
@@ -989,7 +999,7 @@ class HTRAnalysisAppV3(QMainWindow):
                 "⚠ <b>No training data found.</b><br>"
                 "Go to the <b>Prepare Data</b> tab and label some ground truth events first."
             )
-            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.training_status_label.setStyleSheet(stylesheet_status_warning())
             self.train_model_btn.setEnabled(False)
             return
 
@@ -1039,7 +1049,7 @@ class HTRAnalysisAppV3(QMainWindow):
             f"• <b>Class balance:</b> {class_balance:.1f}% positive"
             f"{guidance}"
         )
-        self.training_status_label.setStyleSheet(f"background-color: {status_color}; padding: 10px; border-radius: 4px;")
+        self.training_status_label.setStyleSheet(stylesheet_status_dynamic(status_color))
 
         # Enable train button if sufficient data
         self.train_model_btn.setEnabled(total_events >= 50)  # Absolute minimum
@@ -1197,13 +1207,11 @@ class HTRAnalysisAppV3(QMainWindow):
 
             # Update metrics display
             self.metrics_label.setText(
-                f"📊 Model Performance (Validation Set):\n"
+                f"Model Performance (Validation Set):\n"
                 f"Accuracy: {accuracy:.3f} | Precision: {precision:.3f} | Recall: {recall:.3f} | F1-Score: {f1_score:.3f}\n"
                 f"Review misclassified events to improve model."
             )
-            self.metrics_label.setStyleSheet(
-                "background-color: #d4edda; padding: 8px; border-radius: 4px; color: #155724;"
-            )
+            self.metrics_label.setStyleSheet(stylesheet_status_success())
 
             self.finish_training_progress("Model training", True)
 
@@ -1610,8 +1618,10 @@ class HTRAnalysisAppV3(QMainWindow):
 
 def main():
     """Application entry point."""
+    from .theme import get_app_stylesheet
     app = QApplication(sys.argv)
     app.setApplicationName("HTR Analysis Tool v3")
+    app.setStyleSheet(get_app_stylesheet())
 
     window = HTRAnalysisAppV3()
     window.show()

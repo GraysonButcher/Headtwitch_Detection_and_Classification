@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from .theme import Fonts, get_icon, stylesheet_button_primary, stylesheet_button_success
 
 try:
     from core.config import ConfigManager, get_config_manager
@@ -67,7 +68,7 @@ class ParameterPanel(QWidget):
 
         # Status label (keep at bottom, outside scroll)
         self.status_label = QLabel("Ready to load parameters")
-        self.status_label.setFont(QFont("Arial", 8))
+        self.status_label.setFont(QFont(Fonts.FAMILY, 8))
         self.status_label.setStyleSheet("color: #666; padding: 4px;")
         layout.addWidget(self.status_label)
     
@@ -77,24 +78,27 @@ class ParameterPanel(QWidget):
         param_button_layout = QHBoxLayout()
 
         # Load parameters button
-        load_btn = QPushButton("📁 Load")
-        load_btn.setFont(QFont("Arial", 8))
+        load_btn = QPushButton("Load")
+        load_btn.setIcon(get_icon('open'))
+        load_btn.setFont(QFont(Fonts.FAMILY, 8))
         load_btn.setToolTip("Load parameters from file")
         load_btn.setMaximumWidth(70)
         load_btn.clicked.connect(self.load_parameters_from_file)
         param_button_layout.addWidget(load_btn)
 
         # Save parameters button
-        save_btn = QPushButton("💾 Save")
-        save_btn.setFont(QFont("Arial", 8))
+        save_btn = QPushButton("Save")
+        save_btn.setIcon(get_icon('save'))
+        save_btn.setFont(QFont(Fonts.FAMILY, 8))
         save_btn.setToolTip("Save parameters to file")
         save_btn.setMaximumWidth(70)
         save_btn.clicked.connect(self.save_parameters_to_file)
         param_button_layout.addWidget(save_btn)
 
         # Reset to defaults button
-        reset_btn = QPushButton("🔄 Reset")
-        reset_btn.setFont(QFont("Arial", 8))
+        reset_btn = QPushButton("Reset")
+        reset_btn.setIcon(get_icon('reset'))
+        reset_btn.setFont(QFont(Fonts.FAMILY, 8))
         reset_btn.setToolTip("Reset to default parameters")
         reset_btn.setMaximumWidth(70)
         reset_btn.clicked.connect(self.reset_to_defaults)
@@ -116,49 +120,25 @@ class ParameterPanel(QWidget):
 
         # Info label (more compact)
         info_label = QLabel("Adjust parameters, then reanalyze:")
-        info_label.setFont(QFont("Arial", 8))
+        info_label.setFont(QFont(Fonts.FAMILY, 8))
         info_label.setStyleSheet("color: #666;")
         analysis_layout.addWidget(info_label)
 
         # Buttons row
         button_row = QHBoxLayout()
 
-        self.reanalyze_view_btn = QPushButton("🔍 Reanalyze Current View")
-        self.reanalyze_view_btn.setFont(QFont("Arial", 8, QFont.Bold))
-        self.reanalyze_view_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #007bff;
-                color: white;
-                padding: 4px 8px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #0056b3;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.reanalyze_view_btn = QPushButton("Reanalyze Current View")
+        self.reanalyze_view_btn.setIcon(get_icon('reload'))
+        self.reanalyze_view_btn.setFont(QFont(Fonts.FAMILY, 8, QFont.Bold))
+        self.reanalyze_view_btn.setStyleSheet(stylesheet_button_primary())
         self.reanalyze_view_btn.clicked.connect(self.reanalyze_current_view)
         self.reanalyze_view_btn.setEnabled(False)  # Disabled until H5 loaded
         button_row.addWidget(self.reanalyze_view_btn)
 
-        self.reanalyze_full_btn = QPushButton("📊 Reanalyze Full Video")
-        self.reanalyze_full_btn.setFont(QFont("Arial", 8))
-        self.reanalyze_full_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                padding: 4px 8px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.reanalyze_full_btn = QPushButton("Reanalyze Full Video")
+        self.reanalyze_full_btn.setIcon(get_icon('chart'))
+        self.reanalyze_full_btn.setFont(QFont(Fonts.FAMILY, 8))
+        self.reanalyze_full_btn.setStyleSheet(stylesheet_button_success())
         self.reanalyze_full_btn.clicked.connect(self.reanalyze_full_video)
         self.reanalyze_full_btn.setEnabled(False)  # Disabled until H5 loaded
         button_row.addWidget(self.reanalyze_full_btn)
@@ -282,13 +262,13 @@ class ParameterPanel(QWidget):
         
         label_widget = QLabel(label)
         label_widget.setMinimumWidth(140)
-        label_widget.setFont(QFont("Arial", 8))
+        label_widget.setFont(QFont(Fonts.FAMILY, 8))
         if tooltip:
             label_widget.setToolTip(tooltip)
         
         spinbox = QSpinBox()
         spinbox.setRange(min_val, max_val)
-        spinbox.setFont(QFont("Arial", 8))
+        spinbox.setFont(QFont(Fonts.FAMILY, 8))
         spinbox.valueChanged.connect(self.on_parameter_changed)
         if tooltip:
             spinbox.setToolTip(tooltip)
@@ -307,7 +287,7 @@ class ParameterPanel(QWidget):
         
         label_widget = QLabel(label)
         label_widget.setMinimumWidth(140)
-        label_widget.setFont(QFont("Arial", 8))
+        label_widget.setFont(QFont(Fonts.FAMILY, 8))
         if tooltip:
             label_widget.setToolTip(tooltip)
         
@@ -315,7 +295,7 @@ class ParameterPanel(QWidget):
         spinbox.setRange(min_val, max_val)
         spinbox.setSingleStep(step)
         spinbox.setDecimals(3)
-        spinbox.setFont(QFont("Arial", 8))
+        spinbox.setFont(QFont(Fonts.FAMILY, 8))
         spinbox.valueChanged.connect(self.on_parameter_changed)
         if tooltip:
             spinbox.setToolTip(tooltip)
@@ -331,7 +311,7 @@ class ParameterPanel(QWidget):
     def add_checkbox_parameter(self, layout, key, label, tooltip=""):
         """Add a checkbox parameter control."""
         checkbox = QCheckBox(label)
-        checkbox.setFont(QFont("Arial", 8))
+        checkbox.setFont(QFont(Fonts.FAMILY, 8))
         checkbox.stateChanged.connect(self.on_parameter_changed)
         if tooltip:
             checkbox.setToolTip(tooltip)
@@ -345,13 +325,13 @@ class ParameterPanel(QWidget):
         
         label_widget = QLabel(label)
         label_widget.setMinimumWidth(140)
-        label_widget.setFont(QFont("Arial", 8))
+        label_widget.setFont(QFont(Fonts.FAMILY, 8))
         if tooltip:
             label_widget.setToolTip(tooltip)
         
         combo = QComboBox()
         combo.addItems(options)
-        combo.setFont(QFont("Arial", 8))
+        combo.setFont(QFont(Fonts.FAMILY, 8))
         combo.currentTextChanged.connect(self.on_parameter_changed)
         if tooltip:
             combo.setToolTip(tooltip)
@@ -370,13 +350,13 @@ class ParameterPanel(QWidget):
         
         label_widget = QLabel(label)
         label_widget.setMinimumWidth(80)  # Shorter for compact layout
-        label_widget.setFont(QFont("Arial", 8))
+        label_widget.setFont(QFont(Fonts.FAMILY, 8))
         if tooltip:
             label_widget.setToolTip(tooltip)
         
         spinbox = QSpinBox()
         spinbox.setRange(min_val, max_val)
-        spinbox.setFont(QFont("Arial", 8))
+        spinbox.setFont(QFont(Fonts.FAMILY, 8))
         spinbox.setMaximumWidth(80)  # Increased width for 3-digit numbers
         spinbox.valueChanged.connect(self.on_parameter_changed)
         if tooltip:
@@ -396,7 +376,7 @@ class ParameterPanel(QWidget):
         
         label_widget = QLabel(label)
         label_widget.setMinimumWidth(80)  # Shorter for compact layout
-        label_widget.setFont(QFont("Arial", 8))
+        label_widget.setFont(QFont(Fonts.FAMILY, 8))
         if tooltip:
             label_widget.setToolTip(tooltip)
         
@@ -404,7 +384,7 @@ class ParameterPanel(QWidget):
         spinbox.setRange(min_val, max_val)
         spinbox.setSingleStep(step)
         spinbox.setDecimals(3)
-        spinbox.setFont(QFont("Arial", 8))
+        spinbox.setFont(QFont(Fonts.FAMILY, 8))
         spinbox.setMaximumWidth(90)  # Increased width for decimal values
         spinbox.valueChanged.connect(self.on_parameter_changed)
         if tooltip:
@@ -421,7 +401,7 @@ class ParameterPanel(QWidget):
     def add_compact_checkbox_parameter(self, layout, key, label, tooltip=""):
         """Add a compact checkbox parameter control for 2-column layout."""
         checkbox = QCheckBox(label)
-        checkbox.setFont(QFont("Arial", 8))
+        checkbox.setFont(QFont(Fonts.FAMILY, 8))
         checkbox.stateChanged.connect(self.on_parameter_changed)
         if tooltip:
             checkbox.setToolTip(tooltip)
@@ -435,13 +415,13 @@ class ParameterPanel(QWidget):
         
         label_widget = QLabel(label)
         label_widget.setMinimumWidth(80)  # Shorter for compact layout
-        label_widget.setFont(QFont("Arial", 8))
+        label_widget.setFont(QFont(Fonts.FAMILY, 8))
         if tooltip:
             label_widget.setToolTip(tooltip)
         
         combo = QComboBox()
         combo.addItems(options)
-        combo.setFont(QFont("Arial", 8))
+        combo.setFont(QFont(Fonts.FAMILY, 8))
         combo.setMaximumWidth(80)  # Compact width
         combo.currentTextChanged.connect(self.on_parameter_changed)
         if tooltip:

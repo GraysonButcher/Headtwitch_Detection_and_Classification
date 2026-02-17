@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
+from .theme import Fonts, get_icon, stylesheet_button_success
 
 
 class CSVEditorWidget(QWidget):
@@ -41,29 +42,20 @@ class CSVEditorWidget(QWidget):
         header_layout = QHBoxLayout()
 
         self.file_label = QLabel("No file loaded")
-        self.file_label.setFont(QFont("Arial", 9))
+        self.file_label.setFont(QFont(Fonts.FAMILY, 9))
         header_layout.addWidget(self.file_label)
 
         header_layout.addStretch()
 
-        load_btn = QPushButton("📁 Load CSV")
+        load_btn = QPushButton("Load CSV")
+        load_btn.setIcon(get_icon('open'))
         load_btn.clicked.connect(self.load_csv_dialog)
         header_layout.addWidget(load_btn)
 
-        save_btn = QPushButton("💾 Save Changes")
+        save_btn = QPushButton("Save Changes")
+        save_btn.setIcon(get_icon('save'))
         save_btn.clicked.connect(self.save_csv)
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 6px 12px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
+        save_btn.setStyleSheet(stylesheet_button_success())
         self.save_btn = save_btn
         self.save_btn.setEnabled(False)
         header_layout.addWidget(save_btn)
@@ -82,7 +74,7 @@ class CSVEditorWidget(QWidget):
 
         # Progress bar
         self.progress_label = QLabel("Labeled: 0 / 0 (0%)")
-        self.progress_label.setFont(QFont("Arial", 9))
+        self.progress_label.setFont(QFont(Fonts.FAMILY, 9))
         filter_layout.addWidget(self.progress_label)
 
         self.progress_bar = QProgressBar()
@@ -94,7 +86,7 @@ class CSVEditorWidget(QWidget):
 
         # Instructions
         instructions = QLabel(
-            "💡 <b>Keyboard Shortcuts:</b> "
+            "<b>Keyboard Shortcuts:</b> "
             "Press <b>1</b> for HTR, <b>0</b> for not HTR, <b>Space</b> to toggle, <b>↑/↓</b> to navigate"
         )
         instructions.setWordWrap(True)
@@ -208,7 +200,7 @@ class CSVEditorWidget(QWidget):
                     else:  # Unlabeled
                         item.setBackground(QColor("#fff3cd"))  # Yellow - Unlabeled
                         item.setForeground(QColor("#856404"))
-                    item.setFont(QFont("Arial", 9, QFont.Bold))
+                    item.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
 
                 self.table.setItem(row_idx, col_idx, item)
 

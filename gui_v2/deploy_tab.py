@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDateTime, Signal
 from PySide6.QtGui import QFont
+from .theme import Fonts, Colors, get_icon, stylesheet_status_info, stylesheet_log_area
 
 # Import workflow tracker and metadata dialog
 try:
@@ -32,6 +33,7 @@ except ImportError:
     sys.path.insert(0, current_dir)
     from workflow_tracker import WorkflowTracker
     from metadata_config_dialog import MetadataConfigDialog
+    from theme import Fonts, Colors, get_icon, stylesheet_status_info, stylesheet_log_area
 
 
 class DeployTab(QWidget):
@@ -89,7 +91,7 @@ class DeployTab(QWidget):
             "<b>Use trained models to identify head-twitch responses in your data:</b> "
             "Select a model, choose processing mode (fresh or incremental), and extract features or predict HTRs."
         )
-        instructions.setFont(QFont("Arial", 10))
+        instructions.setFont(QFont(Fonts.FAMILY, 10))
         instructions.setWordWrap(True)
         instructions_layout.addWidget(instructions)
 
@@ -102,16 +104,14 @@ class DeployTab(QWidget):
         status_layout.setContentsMargins(10, 10, 10, 10)
 
         self.status_label = QLabel("No project loaded. Create or open a project to begin.")
-        self.status_label.setFont(QFont("Arial", 9))
+        self.status_label.setFont(QFont(Fonts.FAMILY, 9))
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 8px; border-radius: 4px; color: #6c757d;"
-        )
+        self.status_label.setStyleSheet(stylesheet_status_info())
         status_layout.addWidget(self.status_label)
 
         # File counts
         self.file_counts_label = QLabel("")
-        self.file_counts_label.setFont(QFont("Arial", 9))
+        self.file_counts_label.setFont(QFont(Fonts.FAMILY, 9))
         status_layout.addWidget(self.file_counts_label)
 
         parent_layout.addWidget(status_group)
@@ -123,16 +123,18 @@ class DeployTab(QWidget):
         input_layout.setContentsMargins(10, 10, 10, 10)
 
         # Add H5 files button
-        self.add_h5_btn = QPushButton("📁 Add H5 Files...")
-        self.add_h5_btn.setFont(QFont("Arial", 9))
+        self.add_h5_btn = QPushButton("Add H5 Files...")
+        self.add_h5_btn.setIcon(get_icon('open'))
+        self.add_h5_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.add_h5_btn.setToolTip("Browse and add H5 tracking files to project/input/ folder")
         self.add_h5_btn.clicked.connect(self.add_h5_files)
         self.add_h5_btn.setEnabled(False)
         input_layout.addWidget(self.add_h5_btn)
 
         # Open input folder button
-        self.open_input_btn = QPushButton("📂 Open Input Folder")
-        self.open_input_btn.setFont(QFont("Arial", 9))
+        self.open_input_btn = QPushButton("Open Input Folder")
+        self.open_input_btn.setIcon(get_icon('folder'))
+        self.open_input_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.open_input_btn.setToolTip("Open the project input folder in file explorer")
         self.open_input_btn.clicked.connect(self.open_input_folder)
         self.open_input_btn.setEnabled(False)
@@ -153,11 +155,11 @@ class DeployTab(QWidget):
         model_layout = QHBoxLayout()
         model_label = QLabel("Model:")
         model_label.setMinimumWidth(80)
-        model_label.setFont(QFont("Arial", 9))
+        model_label.setFont(QFont(Fonts.FAMILY, 9))
         model_layout.addWidget(model_label)
 
         self.model_combo = QComboBox()
-        self.model_combo.setFont(QFont("Arial", 9))
+        self.model_combo.setFont(QFont(Fonts.FAMILY, 9))
         self.model_combo.setEditable(False)
         model_layout.addWidget(self.model_combo)
 
@@ -172,12 +174,12 @@ class DeployTab(QWidget):
         param_layout = QHBoxLayout()
         param_label = QLabel("Parameters:")
         param_label.setMinimumWidth(80)
-        param_label.setFont(QFont("Arial", 9))
+        param_label.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(param_label)
 
         self.param_path_edit = QLineEdit()
         self.param_path_edit.setPlaceholderText("Optional: Load parameter configuration")
-        self.param_path_edit.setFont(QFont("Arial", 9))
+        self.param_path_edit.setFont(QFont(Fonts.FAMILY, 9))
         self.param_path_edit.setReadOnly(True)
         param_layout.addWidget(self.param_path_edit)
 
@@ -190,8 +192,8 @@ class DeployTab(QWidget):
 
         # Ear detection mode indicator
         self.ear_mode_label = QLabel("Ear Detection: Absolute Mode")
-        self.ear_mode_label.setFont(QFont("Arial", 8))
-        self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+        self.ear_mode_label.setFont(QFont(Fonts.FAMILY, 8))
+        self.ear_mode_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; padding: 2px 0;")
         config_layout.addWidget(self.ear_mode_label)
 
         parent_layout.addWidget(config_group)
@@ -207,13 +209,13 @@ class DeployTab(QWidget):
 
         # Fresh batch mode
         self.fresh_mode_radio = QRadioButton("Fresh Batch (Process all files)")
-        self.fresh_mode_radio.setFont(QFont("Arial", 9))
+        self.fresh_mode_radio.setFont(QFont(Fonts.FAMILY, 9))
         self.mode_button_group.addButton(self.fresh_mode_radio, 0)
         mode_layout.addWidget(self.fresh_mode_radio)
 
         fresh_help = QLabel("   → Extract features, predict, and generate report for all H5 files")
-        fresh_help.setFont(QFont("Arial", 8))
-        fresh_help.setStyleSheet("color: #6c757d;")
+        fresh_help.setFont(QFont(Fonts.FAMILY, 8))
+        fresh_help.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         fresh_help.setWordWrap(True)
         mode_layout.addWidget(fresh_help)
 
@@ -221,13 +223,13 @@ class DeployTab(QWidget):
 
         # Incremental mode
         self.incremental_mode_radio = QRadioButton("Incremental (Process only new files)")
-        self.incremental_mode_radio.setFont(QFont("Arial", 9))
+        self.incremental_mode_radio.setFont(QFont(Fonts.FAMILY, 9))
         self.mode_button_group.addButton(self.incremental_mode_radio, 1)
         mode_layout.addWidget(self.incremental_mode_radio)
 
         incremental_help = QLabel("   → Process only new H5 files added since last run, update existing report")
-        incremental_help.setFont(QFont("Arial", 8))
-        incremental_help.setStyleSheet("color: #6c757d;")
+        incremental_help.setFont(QFont(Fonts.FAMILY, 8))
+        incremental_help.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         incremental_help.setWordWrap(True)
         mode_layout.addWidget(incremental_help)
 
@@ -241,14 +243,16 @@ class DeployTab(QWidget):
         buttons_layout = QHBoxLayout()
 
         # Processing step buttons
-        self.step1_btn = QPushButton("1️⃣ Extract Features")
-        self.step1_btn.setFont(QFont("Arial", 9))
+        self.step1_btn = QPushButton("Extract Features")
+        self.step1_btn.setIcon(get_icon('play'))
+        self.step1_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.step1_btn.clicked.connect(self.run_extract_step)
         self.step1_btn.setEnabled(False)
         buttons_layout.addWidget(self.step1_btn)
 
-        self.step2_btn = QPushButton("2️⃣ Predict HTRs")
-        self.step2_btn.setFont(QFont("Arial", 9))
+        self.step2_btn = QPushButton("Predict HTRs")
+        self.step2_btn.setIcon(get_icon('computer'))
+        self.step2_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.step2_btn.clicked.connect(self.run_predict_step)
         self.step2_btn.setEnabled(False)
         buttons_layout.addWidget(self.step2_btn)
@@ -268,17 +272,17 @@ class DeployTab(QWidget):
         run_selector_layout = QHBoxLayout()
 
         run_label = QLabel("Prediction Run:")
-        run_label.setFont(QFont("Arial", 9))
+        run_label.setFont(QFont(Fonts.FAMILY, 9))
         run_selector_layout.addWidget(run_label)
 
         self.run_combo = QComboBox()
-        self.run_combo.setFont(QFont("Arial", 9))
+        self.run_combo.setFont(QFont(Fonts.FAMILY, 9))
         self.run_combo.setMinimumWidth(300)
         self.run_combo.currentIndexChanged.connect(self._on_run_selected)
         run_selector_layout.addWidget(self.run_combo)
 
         self.compare_runs_btn = QPushButton("Compare Runs")
-        self.compare_runs_btn.setFont(QFont("Arial", 9))
+        self.compare_runs_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.compare_runs_btn.setToolTip("Compare HTR counts between two prediction runs")
         self.compare_runs_btn.clicked.connect(self._show_comparison_dialog)
         self.compare_runs_btn.setEnabled(False)
@@ -291,16 +295,18 @@ class DeployTab(QWidget):
         results_layout = QHBoxLayout()
 
         # Open predictions folder button
-        self.open_predictions_btn = QPushButton("📁 Open Predictions Folder")
-        self.open_predictions_btn.setFont(QFont("Arial", 9))
+        self.open_predictions_btn = QPushButton("Open Predictions Folder")
+        self.open_predictions_btn.setIcon(get_icon('folder'))
+        self.open_predictions_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.open_predictions_btn.setToolTip("Open the predictions folder in file explorer")
         self.open_predictions_btn.clicked.connect(self.open_predictions_folder)
         self.open_predictions_btn.setEnabled(False)
         results_layout.addWidget(self.open_predictions_btn)
 
         # View results summary button
-        self.view_summary_btn = QPushButton("📊 View Results Summary")
-        self.view_summary_btn.setFont(QFont("Arial", 9))
+        self.view_summary_btn = QPushButton("View Results Summary")
+        self.view_summary_btn.setIcon(get_icon('chart'))
+        self.view_summary_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_summary_btn.setToolTip("View a summary of HTR counts for each file")
         self.view_summary_btn.clicked.connect(self.view_results_summary)
         self.view_summary_btn.setEnabled(False)
@@ -326,16 +332,10 @@ class DeployTab(QWidget):
         # Progress text
         self.progress_text = QTextEdit()
         self.progress_text.setMaximumHeight(120)
-        self.progress_text.setFont(QFont("Consolas", 8))
+        self.progress_text.setFont(QFont(Fonts.MONO_FAMILY, 8))
         self.progress_text.setReadOnly(True)
         self.progress_text.setPlaceholderText("Processing progress will appear here...")
-        self.progress_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                color: #495057;
-            }
-        """)
+        self.progress_text.setStyleSheet(stylesheet_log_area())
         progress_layout.addWidget(self.progress_text)
 
         parent_layout.addWidget(progress_group)
@@ -1222,12 +1222,12 @@ class DeployTab(QWidget):
 
         # Info label
         info_label = QLabel(f"Summary of HTR predictions for {len(prediction_files)} file(s):")
-        info_label.setFont(QFont("Arial", 10))
+        info_label.setFont(QFont(Fonts.FAMILY, 10))
         layout.addWidget(info_label)
 
         # Instruction label
         instruction_label = QLabel("Click on any file to view individual HTR events")
-        instruction_label.setFont(QFont("Arial", 9))
+        instruction_label.setFont(QFont(Fonts.FAMILY, 9))
         instruction_label.setStyleSheet("color: #6c757d; font-style: italic; margin-bottom: 5px;")
         layout.addWidget(instruction_label)
 
@@ -1236,7 +1236,7 @@ class DeployTab(QWidget):
         table.setColumnCount(2)
         table.setHorizontalHeaderLabels(["File", "HTR Count"])
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        table.setFont(QFont("Arial", 9))
+        table.setFont(QFont(Fonts.FAMILY, 9))
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -1272,11 +1272,11 @@ class DeployTab(QWidget):
         totals_row = len(summary_data)
 
         total_item = QTableWidgetItem("TOTAL")
-        total_item.setFont(QFont("Arial", 9, QFont.Bold))
+        total_item.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
         table.setItem(totals_row, 0, total_item)
 
         total_htrs_item = QTableWidgetItem(str(total_htrs_all))
-        total_htrs_item.setFont(QFont("Arial", 9, QFont.Bold))
+        total_htrs_item.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
         table.setItem(totals_row, 1, total_htrs_item)
 
         # Connect row click to detail view
@@ -1293,7 +1293,8 @@ class DeployTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        export_csv_btn = QPushButton("📄 Export to CSV")
+        export_csv_btn = QPushButton("Export to CSV")
+        export_csv_btn.setIcon(get_icon('save'))
         export_csv_btn.clicked.connect(lambda: self.export_results_to_csv(summary_data))
         button_layout.addWidget(export_csv_btn)
 
@@ -1471,7 +1472,7 @@ class DeployTab(QWidget):
 
             # Header info
             header_label = QLabel(f"<b>{filename}</b> - {len(htr_df)} HTR event(s) detected (FPS: {fps})")
-            header_label.setFont(QFont("Arial", 10))
+            header_label.setFont(QFont(Fonts.FAMILY, 10))
             layout.addWidget(header_label)
 
             # Create detail table
@@ -1479,7 +1480,7 @@ class DeployTab(QWidget):
             detail_table.setColumnCount(3)
             detail_table.setHorizontalHeaderLabels(["Event #", "Start Frame", "Start Time (hh:mm:ss)"])
             detail_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-            detail_table.setFont(QFont("Arial", 9))
+            detail_table.setFont(QFont(Fonts.FAMILY, 9))
             detail_table.setAlternatingRowColors(True)
 
             # Populate detail table
@@ -1668,7 +1669,7 @@ class DeployTab(QWidget):
 
         selectors_layout.addWidget(QLabel("Run A:"))
         combo_a = QComboBox()
-        combo_a.setFont(QFont("Arial", 9))
+        combo_a.setFont(QFont(Fonts.FAMILY, 9))
         for run in runs:
             label = run['run_name'] if not run['is_legacy'] else "legacy"
             combo_a.addItem(f"{label} ({run['csv_count']} files)", run['run_path'])
@@ -1676,7 +1677,7 @@ class DeployTab(QWidget):
 
         selectors_layout.addWidget(QLabel("Run B:"))
         combo_b = QComboBox()
-        combo_b.setFont(QFont("Arial", 9))
+        combo_b.setFont(QFont(Fonts.FAMILY, 9))
         for run in runs:
             label = run['run_name'] if not run['is_legacy'] else "legacy"
             combo_b.addItem(f"{label} ({run['csv_count']} files)", run['run_path'])
@@ -1685,7 +1686,7 @@ class DeployTab(QWidget):
         selectors_layout.addWidget(combo_b)
 
         compare_btn = QPushButton("Compare")
-        compare_btn.setFont(QFont("Arial", 9))
+        compare_btn.setFont(QFont(Fonts.FAMILY, 9))
         selectors_layout.addWidget(compare_btn)
 
         selectors_layout.addStretch()
@@ -1696,7 +1697,7 @@ class DeployTab(QWidget):
         table.setColumnCount(4)
         table.setHorizontalHeaderLabels(["File", "Run A HTRs", "Run B HTRs", "Delta"])
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        table.setFont(QFont("Arial", 9))
+        table.setFont(QFont(Fonts.FAMILY, 9))
         table.setAlternatingRowColors(True)
         layout.addWidget(table)
 
@@ -1737,21 +1738,21 @@ class DeployTab(QWidget):
             # Totals row
             totals_row = len(all_files)
             total_label = QTableWidgetItem("TOTAL")
-            total_label.setFont(QFont("Arial", 9, QFont.Bold))
+            total_label.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
             table.setItem(totals_row, 0, total_label)
 
             ta = QTableWidgetItem(str(total_a))
-            ta.setFont(QFont("Arial", 9, QFont.Bold))
+            ta.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
             table.setItem(totals_row, 1, ta)
 
             tb = QTableWidgetItem(str(total_b))
-            tb.setFont(QFont("Arial", 9, QFont.Bold))
+            tb.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
             table.setItem(totals_row, 2, tb)
 
             delta_total = total_b - total_a
             delta_str = f"+{delta_total}" if delta_total > 0 else str(delta_total)
             td = QTableWidgetItem(delta_str)
-            td.setFont(QFont("Arial", 9, QFont.Bold))
+            td.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
             table.setItem(totals_row, 3, td)
 
         compare_btn.clicked.connect(do_compare)
@@ -1781,10 +1782,10 @@ class DeployTab(QWidget):
                     self.ear_mode_label.setStyleSheet("color: #1565c0; font-weight: bold; padding: 2px 0;")
                 else:
                     self.ear_mode_label.setText("Ear Detection: Absolute Mode")
-                    self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+                    self.ear_mode_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; padding: 2px 0;")
         except Exception:
             self.ear_mode_label.setText("Ear Detection: Absolute Mode")
-            self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+            self.ear_mode_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; padding: 2px 0;")
 
     def show_progress(self, message):
         """Show progress message."""
