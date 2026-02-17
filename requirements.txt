@@ -8,6 +8,7 @@ h5py>=3.1.0
 # Machine learning
 scikit-learn>=1.0.0
 xgboost>=1.5.0
+shap>=0.42.0
 
 # Computer vision and signal processing
 opencv-python>=4.5.0

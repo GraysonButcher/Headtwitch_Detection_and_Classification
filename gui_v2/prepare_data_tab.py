@@ -235,8 +235,9 @@ class PrepareDataTab(QWidget):
             self.open_features_btn.setEnabled(False)
             return
 
-        # Initialize workflow tracker
-        self.workflow_tracker = WorkflowTracker(project_path)
+        # Initialize workflow tracker with saved metadata config
+        metadata_config = self.project_manager.get_metadata_config()
+        self.workflow_tracker = WorkflowTracker(project_path, metadata_config=metadata_config)
 
         # Get workflow status
         status = self.workflow_tracker.get_workflow_status()
@@ -333,12 +334,26 @@ class PrepareDataTab(QWidget):
         input_folder = os.path.join(project_path, "input")
         output_folder = os.path.join(project_path, "features")
 
-        # Show metadata configuration dialog
-        metadata_dialog = MetadataConfigDialog(input_folder, self)
-        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
-            return  # User cancelled
+        # Load saved metadata config or configure
+        metadata_config = self.project_manager.get_metadata_config()
+        if metadata_config is not None:
+            reply = QMessageBox.question(
+                self,
+                "Metadata Configuration",
+                "Use existing metadata configuration?\n\nClick 'No' to reconfigure.",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            if reply == QMessageBox.Cancel:
+                return
+            if reply == QMessageBox.No:
+                metadata_config = None  # Fall through to dialog
 
-        metadata_config = metadata_dialog.get_config()
+        if metadata_config is None:
+            metadata_dialog = MetadataConfigDialog(input_folder, self)
+            if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+                return  # User cancelled
+            metadata_config = metadata_dialog.get_config()
+            self.project_manager.save_metadata_config(metadata_config)
 
         # Start extraction
         self.show_features_progress("Starting feature extraction...")

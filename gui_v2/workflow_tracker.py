@@ -15,14 +15,16 @@ import json
 class WorkflowTracker:
     """Manages file processing state and detects workflow changes."""
 
-    def __init__(self, project_path: str):
+    def __init__(self, project_path: str, metadata_config=None):
         """
         Initialize workflow tracker for a project.
 
         Args:
             project_path: Root path to the project directory
+            metadata_config: Optional MetadataConfig for computing expected feature filenames
         """
         self.project_path = project_path
+        self.metadata_config = metadata_config
         self.input_folder = os.path.join(project_path, "input")
         self.features_folder = os.path.join(project_path, "features")
         self.predictions_folder = os.path.join(project_path, "predictions")
@@ -110,18 +112,33 @@ class WorkflowTracker:
 
         return sorted(file_list, key=lambda x: x['basename'])
 
-    def scan_prediction_files(self) -> List[Dict]:
+    def scan_prediction_files(self, run_path: str = None) -> List[Dict]:
         """
-        Scan for all prediction CSV files.
+        Scan for prediction CSV files.
+
+        Args:
+            run_path: Optional path to a specific prediction run subfolder.
+                      When given, scan only that folder.
+                      When None, scan root predictions/ and all subdirectories.
 
         Returns:
             List of dicts with file info: {path, basename, mtime}
         """
-        if not os.path.exists(self.predictions_folder):
+        if run_path:
+            scan_folder = run_path
+        else:
+            scan_folder = self.predictions_folder
+
+        if not os.path.exists(scan_folder):
             return []
 
-        prediction_pattern = os.path.join(self.predictions_folder, "*.csv")
-        prediction_files = glob.glob(prediction_pattern)
+        # Scan the target folder (and subdirs when scanning root)
+        if run_path:
+            prediction_files = glob.glob(os.path.join(scan_folder, "*.csv"))
+        else:
+            # Legacy flat CSVs + all run subfolder CSVs
+            prediction_files = glob.glob(os.path.join(scan_folder, "*.csv"))
+            prediction_files += glob.glob(os.path.join(scan_folder, "*", "*.csv"))
 
         file_list = []
         for filepath in prediction_files:
@@ -134,39 +151,62 @@ class WorkflowTracker:
 
         return sorted(file_list, key=lambda x: x['basename'])
 
+    def _get_expected_feature_filename(self, h5_path: str) -> str:
+        """Compute the expected feature filename for an H5 file.
+
+        Uses metadata-based naming if metadata_config is set, otherwise
+        falls back to simple basename + _htr_features.csv.
+        """
+        if self.metadata_config:
+            try:
+                from core.feature_extraction import MetadataExtractor
+                extractor = MetadataExtractor(self.metadata_config)
+                return extractor.generate_output_filename(h5_path)
+            except Exception:
+                pass
+        # Fallback: simple basename
+        base_name = os.path.splitext(os.path.basename(h5_path))[0]
+        return f"{base_name}_htr_features.csv"
+
     def detect_new_h5_files(self) -> Tuple[List[str], List[str]]:
         """
         Detect H5 files that don't have corresponding feature files.
+
+        For each H5 file, forward-computes the expected feature filename
+        (using metadata config if available) and checks whether that file
+        exists in the features folder.
 
         Returns:
             Tuple of (new_h5_files, already_processed_h5_files)
         """
         h5_files = self.scan_h5_files()
-        feature_files = self.scan_feature_files()
-
-        # Create set of feature basenames
-        feature_basenames = {f['basename'] for f in feature_files}
 
         new_files = []
         processed_files = []
 
         for h5 in h5_files:
-            if h5['basename'] in feature_basenames:
+            expected_name = self._get_expected_feature_filename(h5['path'])
+            expected_path = os.path.join(self.features_folder, expected_name)
+            if os.path.exists(expected_path):
                 processed_files.append(h5['path'])
             else:
                 new_files.append(h5['path'])
 
         return new_files, processed_files
 
-    def detect_unpredicted_features(self) -> Tuple[List[str], List[str]]:
+    def detect_unpredicted_features(self, run_path: str = None) -> Tuple[List[str], List[str]]:
         """
         Detect feature files that don't have corresponding prediction files.
+
+        Args:
+            run_path: Optional path to a specific prediction run subfolder.
+                      Forwarded to scan_prediction_files().
 
         Returns:
             Tuple of (unpredicted_features, already_predicted_features)
         """
         feature_files = self.scan_feature_files()
-        prediction_files = self.scan_prediction_files()
+        prediction_files = self.scan_prediction_files(run_path=run_path)
 
         # Create set of prediction basenames
         prediction_basenames = {p['basename'] for p in prediction_files}

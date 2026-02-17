@@ -255,6 +255,10 @@ class VideoInspectorWidget(QWidget):
             self._load_h5_data()
             self._calculate_signals()
 
+            # Enable frame navigation so user can scrub signals without video
+            self.frame_slider.setMaximum(max(0, self.total_frames - 1))
+            self.set_navigation_enabled(True)
+
             # Update status
             filename = os.path.basename(file_path)
             self.video_label.setText(f"H5 Loaded: {filename}\n\nLoad a video file to display frames")
