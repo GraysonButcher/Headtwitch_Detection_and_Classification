@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDateTime, Signal
 from PySide6.QtGui import QFont
+from .theme import Fonts, get_icon, stylesheet_button_primary, stylesheet_log_area, stylesheet_status_info, stylesheet_separator
 
 # Import CSV editor widget
 try:
@@ -30,6 +31,7 @@ except ImportError:
     from csv_editor_widget import CSVEditorWidget
     from workflow_tracker import WorkflowTracker
     from metadata_config_dialog import MetadataConfigDialog
+    from theme import Fonts, get_icon, stylesheet_button_primary, stylesheet_log_area, stylesheet_status_info, stylesheet_separator
 
 
 class PrepareDataTab(QWidget):
@@ -56,7 +58,7 @@ class PrepareDataTab(QWidget):
 
         # Separator
         separator = QLabel()
-        separator.setStyleSheet("background-color: #dee2e6; min-height: 2px; max-height: 2px;")
+        separator.setStyleSheet(stylesheet_separator())
         layout.addWidget(separator)
 
         # Section 2: Label Ground Truth
@@ -68,30 +70,28 @@ class PrepareDataTab(QWidget):
     def create_extract_features_section(self, parent_layout):
         """Section 1: Extract Features from H5 files."""
         features_group = QGroupBox("Step 1: Extract Features from H5 Files")
-        features_group.setFont(QFont("Arial", 10, QFont.Bold))
+        features_group.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
         features_layout = QVBoxLayout(features_group)
         features_layout.setContentsMargins(10, 15, 10, 10)
         features_layout.setSpacing(10)
 
         # Status display
         self.features_status_label = QLabel("No project loaded. Create or open a project to begin.")
-        self.features_status_label.setFont(QFont("Arial", 9))
+        self.features_status_label.setFont(QFont(Fonts.FAMILY, 9))
         self.features_status_label.setWordWrap(True)
-        self.features_status_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 8px; border-radius: 4px; color: #6c757d;"
-        )
+        self.features_status_label.setStyleSheet(stylesheet_status_info())
         features_layout.addWidget(self.features_status_label)
 
         # Parameters selection
         param_layout = QHBoxLayout()
         param_label = QLabel("Parameters:")
         param_label.setMinimumWidth(80)
-        param_label.setFont(QFont("Arial", 9))
+        param_label.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(param_label)
 
         self.features_param_edit = QLineEdit()
         self.features_param_edit.setPlaceholderText("Optional: Load parameter configuration")
-        self.features_param_edit.setFont(QFont("Arial", 9))
+        self.features_param_edit.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(self.features_param_edit)
 
         param_browse_btn = QPushButton("Browse...")
@@ -104,31 +104,19 @@ class PrepareDataTab(QWidget):
         # Processing options
         options_layout = QHBoxLayout()
 
-        self.extract_all_btn = QPushButton("📦 Extract All Features")
-        self.extract_all_btn.setFont(QFont("Arial", 9))
+        self.extract_all_btn = QPushButton("Extract All Features")
+        self.extract_all_btn.setIcon(get_icon('play'))
+        self.extract_all_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.extract_all_btn.clicked.connect(lambda: self.extract_features(mode='all'))
         self.extract_all_btn.setEnabled(False)
         options_layout.addWidget(self.extract_all_btn)
 
-        self.extract_new_btn = QPushButton("🆕 Extract New Files Only")
-        self.extract_new_btn.setFont(QFont("Arial", 9))
+        self.extract_new_btn = QPushButton("Extract New Files Only")
+        self.extract_new_btn.setIcon(get_icon('new'))
+        self.extract_new_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.extract_new_btn.clicked.connect(lambda: self.extract_features(mode='new'))
         self.extract_new_btn.setEnabled(False)
-        self.extract_new_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #007bff;
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #0056b3;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.extract_new_btn.setStyleSheet(stylesheet_button_primary())
         options_layout.addWidget(self.extract_new_btn)
 
         features_layout.addLayout(options_layout)
@@ -136,15 +124,17 @@ class PrepareDataTab(QWidget):
         # Second row: Combine and Open folder buttons
         utils_layout = QHBoxLayout()
 
-        self.combine_features_btn = QPushButton("📑 Combine All Features")
-        self.combine_features_btn.setFont(QFont("Arial", 9))
+        self.combine_features_btn = QPushButton("Combine All Features")
+        self.combine_features_btn.setIcon(get_icon('combine'))
+        self.combine_features_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.combine_features_btn.setToolTip("Combine all feature CSVs into a single master file")
         self.combine_features_btn.clicked.connect(self.combine_all_features)
         self.combine_features_btn.setEnabled(False)
         utils_layout.addWidget(self.combine_features_btn)
 
-        self.open_features_btn = QPushButton("📂 Open Features Folder")
-        self.open_features_btn.setFont(QFont("Arial", 9))
+        self.open_features_btn = QPushButton("Open Features Folder")
+        self.open_features_btn.setIcon(get_icon('folder'))
+        self.open_features_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.open_features_btn.clicked.connect(self.open_features_folder)
         self.open_features_btn.setEnabled(False)
         utils_layout.addWidget(self.open_features_btn)
@@ -154,16 +144,10 @@ class PrepareDataTab(QWidget):
         # Progress
         self.features_progress_text = QTextEdit()
         self.features_progress_text.setMaximumHeight(80)
-        self.features_progress_text.setFont(QFont("Consolas", 8))
+        self.features_progress_text.setFont(QFont(Fonts.MONO_FAMILY, 8))
         self.features_progress_text.setReadOnly(True)
         self.features_progress_text.setPlaceholderText("Feature extraction progress will appear here...")
-        self.features_progress_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                color: #495057;
-            }
-        """)
+        self.features_progress_text.setStyleSheet(stylesheet_log_area())
         features_layout.addWidget(self.features_progress_text)
 
         parent_layout.addWidget(features_group)
@@ -171,7 +155,7 @@ class PrepareDataTab(QWidget):
     def create_label_ground_truth_section(self, parent_layout):
         """Section 2: Label Ground Truth data."""
         label_group = QGroupBox("Step 2: Label Ground Truth Data")
-        label_group.setFont(QFont("Arial", 10, QFont.Bold))
+        label_group.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
         label_layout = QVBoxLayout(label_group)
         label_layout.setContentsMargins(10, 15, 10, 10)
         label_layout.setSpacing(10)
@@ -181,7 +165,7 @@ class PrepareDataTab(QWidget):
             "<b>Label feature files to create training data:</b> "
             "Load a feature CSV, mark HTR events (1) and non-HTR events (0), then save."
         )
-        instructions.setFont(QFont("Arial", 9))
+        instructions.setFont(QFont(Fonts.FAMILY, 9))
         instructions.setWordWrap(True)
         label_layout.addWidget(instructions)
 
@@ -194,11 +178,12 @@ class PrepareDataTab(QWidget):
         # Alternative: Open external editor
         external_layout = QHBoxLayout()
         external_label = QLabel("Or:")
-        external_label.setFont(QFont("Arial", 9))
+        external_label.setFont(QFont(Fonts.FAMILY, 9))
         external_layout.addWidget(external_label)
 
-        open_folder_btn = QPushButton("📂 Open Features Folder (Edit Externally)")
-        open_folder_btn.setFont(QFont("Arial", 9))
+        open_folder_btn = QPushButton("Open Features Folder (Edit Externally)")
+        open_folder_btn.setIcon(get_icon('folder'))
+        open_folder_btn.setFont(QFont(Fonts.FAMILY, 9))
         open_folder_btn.clicked.connect(self.open_features_folder)
         external_layout.addWidget(open_folder_btn)
 
@@ -235,8 +220,9 @@ class PrepareDataTab(QWidget):
             self.open_features_btn.setEnabled(False)
             return
 
-        # Initialize workflow tracker
-        self.workflow_tracker = WorkflowTracker(project_path)
+        # Initialize workflow tracker with saved metadata config
+        metadata_config = self.project_manager.get_metadata_config()
+        self.workflow_tracker = WorkflowTracker(project_path, metadata_config=metadata_config)
 
         # Get workflow status
         status = self.workflow_tracker.get_workflow_status()
@@ -255,10 +241,10 @@ class PrepareDataTab(QWidget):
 
         if h5_new > 0:
             self.extract_new_btn.setEnabled(True)
-            self.extract_new_btn.setText(f"🆕 Extract New Files Only ({h5_new} new)")
+            self.extract_new_btn.setText(f"Extract New Files Only ({h5_new} new)")
         else:
             self.extract_new_btn.setEnabled(False)
-            self.extract_new_btn.setText("🆕 Extract New Files Only")
+            self.extract_new_btn.setText("Extract New Files Only")
 
         # Enable combine/open buttons if features exist
         if features_total > 0:
@@ -333,12 +319,26 @@ class PrepareDataTab(QWidget):
         input_folder = os.path.join(project_path, "input")
         output_folder = os.path.join(project_path, "features")
 
-        # Show metadata configuration dialog
-        metadata_dialog = MetadataConfigDialog(input_folder, self)
-        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
-            return  # User cancelled
+        # Load saved metadata config or configure
+        metadata_config = self.project_manager.get_metadata_config()
+        if metadata_config is not None:
+            reply = QMessageBox.question(
+                self,
+                "Metadata Configuration",
+                "Use existing metadata configuration?\n\nClick 'No' to reconfigure.",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            if reply == QMessageBox.Cancel:
+                return
+            if reply == QMessageBox.No:
+                metadata_config = None  # Fall through to dialog
 
-        metadata_config = metadata_dialog.get_config()
+        if metadata_config is None:
+            metadata_dialog = MetadataConfigDialog(input_folder, self)
+            if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+                return  # User cancelled
+            metadata_config = metadata_dialog.get_config()
+            self.project_manager.save_metadata_config(metadata_config)
 
         # Start extraction
         self.show_features_progress("Starting feature extraction...")

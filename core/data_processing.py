@@ -134,22 +134,30 @@ class SleapDataLoader:
 
 class SignalProcessor:
     """Processes tracking data to generate analysis signals."""
-    
+
+    use_vectorized = True  # Vectorized signal computation (~50-100x faster)
+
     def __init__(self, data_loader: SleapDataLoader, node_mapping: NodeMapping):
         self.data_loader = data_loader
         self.node_mapping = node_mapping
         
     def calculate_ear_distances(self, start_frame: int = 0, end_frame: Optional[int] = None, instance: int = 0) -> Tuple[np.ndarray, np.ndarray]:
         """Calculate ear distances from head midline."""
+        if SignalProcessor.use_vectorized:
+            return self._calculate_ear_distances_vectorized(start_frame, end_frame, instance)
+        return self._calculate_ear_distances_loop(start_frame, end_frame, instance)
+
+    def _calculate_ear_distances_loop(self, start_frame: int = 0, end_frame: Optional[int] = None, instance: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+        """Original loop-based ear distance calculation."""
         if end_frame is None:
             end_frame = self.data_loader.total_frames
-        
+
         # Get node positions
         left_ear_pos = self.data_loader.get_node_positions(self.node_mapping.left_ear, start_frame, end_frame, instance)
         right_ear_pos = self.data_loader.get_node_positions(self.node_mapping.right_ear, start_frame, end_frame, instance)
         back_pos = self.data_loader.get_node_positions(self.node_mapping.back, start_frame, end_frame, instance)
         nose_pos = self.data_loader.get_node_positions(self.node_mapping.nose, start_frame, end_frame, instance)
-        
+
         left_distances = []
         right_distances = []
 
@@ -176,24 +184,79 @@ class SignalProcessor:
 
             left_distances.append(left_dist)
             right_distances.append(right_dist)
-        
+
         # Interpolate NaN values
         left_distances = pd.Series(left_distances).interpolate().fillna(0).to_numpy()
         right_distances = pd.Series(right_distances).interpolate().fillna(0).to_numpy()
-        
+
         return left_distances, right_distances
-    
-    def calculate_head_distance_signal(self, start_frame: int = 0, end_frame: Optional[int] = None, 
-                                     instance: int = 0, interpolation_method: str = 'linear') -> np.ndarray:
-        """Calculate head distance from back-nose midline."""
+
+    def _calculate_ear_distances_vectorized(self, start_frame: int = 0, end_frame: Optional[int] = None, instance: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+        """Vectorized ear distance calculation (same math, ~50-100x faster)."""
         if end_frame is None:
             end_frame = self.data_loader.total_frames
-        
+
+        # Get all node positions as (N, 2) arrays
+        left_ear_pos = self.data_loader.get_node_positions(self.node_mapping.left_ear, start_frame, end_frame, instance)
+        right_ear_pos = self.data_loader.get_node_positions(self.node_mapping.right_ear, start_frame, end_frame, instance)
+        back_pos = self.data_loader.get_node_positions(self.node_mapping.back, start_frame, end_frame, instance)
+        nose_pos = self.data_loader.get_node_positions(self.node_mapping.nose, start_frame, end_frame, instance)
+
+        # NaN mask: True where any body part has NaN coordinates
+        nan_mask = (np.any(np.isnan(left_ear_pos), axis=1) |
+                    np.any(np.isnan(right_ear_pos), axis=1) |
+                    np.any(np.isnan(back_pos), axis=1) |
+                    np.any(np.isnan(nose_pos), axis=1))
+
+        # Line intersection formula (same as _line_intersection, vectorized)
+        x1, y1 = back_pos[:, 0], back_pos[:, 1]
+        x2, y2 = nose_pos[:, 0], nose_pos[:, 1]
+        x3, y3 = left_ear_pos[:, 0], left_ear_pos[:, 1]
+        x4, y4 = right_ear_pos[:, 0], right_ear_pos[:, 1]
+
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+
+        # Parallel lines (denom == 0) get NaN, same as original returning None
+        parallel_mask = denom == 0
+        denom_safe = np.where(parallel_mask, 1.0, denom)
+
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom_safe
+        ix = x1 + t * (x2 - x1)
+        iy = y1 + t * (y2 - y1)
+
+        # Distances from ears to intersection point
+        left_distances = np.sqrt((x3 - ix)**2 + (y3 - iy)**2)
+        right_distances = np.sqrt((x4 - ix)**2 + (y4 - iy)**2)
+
+        # Apply combined NaN mask
+        invalid_mask = nan_mask | parallel_mask
+        left_distances[invalid_mask] = np.nan
+        right_distances[invalid_mask] = np.nan
+
+        # Interpolate NaN values (same as original)
+        left_distances = pd.Series(left_distances).interpolate().fillna(0).to_numpy()
+        right_distances = pd.Series(right_distances).interpolate().fillna(0).to_numpy()
+
+        return left_distances, right_distances
+    
+    def calculate_head_distance_signal(self, start_frame: int = 0, end_frame: Optional[int] = None,
+                                     instance: int = 0, interpolation_method: str = 'linear') -> np.ndarray:
+        """Calculate head distance from back-nose midline."""
+        if SignalProcessor.use_vectorized:
+            return self._calculate_head_distance_signal_vectorized(start_frame, end_frame, instance, interpolation_method)
+        return self._calculate_head_distance_signal_loop(start_frame, end_frame, instance, interpolation_method)
+
+    def _calculate_head_distance_signal_loop(self, start_frame: int = 0, end_frame: Optional[int] = None,
+                                            instance: int = 0, interpolation_method: str = 'linear') -> np.ndarray:
+        """Original loop-based head distance calculation."""
+        if end_frame is None:
+            end_frame = self.data_loader.total_frames
+
         # Get node positions
         back_pos = self.data_loader.get_node_positions(self.node_mapping.back, start_frame, end_frame, instance)
         nose_pos = self.data_loader.get_node_positions(self.node_mapping.nose, start_frame, end_frame, instance)
         head_pos = self.data_loader.get_node_positions(self.node_mapping.head, start_frame, end_frame, instance)
-        
+
         # Calculate perpendicular distances
         distances = []
         for i in range(len(head_pos)):
@@ -207,14 +270,67 @@ class SignalProcessor:
 
             dist = point_line_distance(head_pos[i], back_pos[i], nose_pos[i])
             distances.append(dist)
-        
+
         signal = np.array(distances)
-        
+
         # Interpolate NaN values if present
         if np.isnan(signal).any():
             signal = pd.Series(signal).interpolate(method=interpolation_method).fillna(0).to_numpy()
-        
+
         return signal
+
+    def _calculate_head_distance_signal_vectorized(self, start_frame: int = 0, end_frame: Optional[int] = None,
+                                                   instance: int = 0, interpolation_method: str = 'linear') -> np.ndarray:
+        """Vectorized head distance calculation (same math, ~50-100x faster).
+
+        Uses the same projection formula as point_line_distance:
+            t = dot(ap, ab) / dot(ab, ab)
+            proj = a + t * ab
+            dist = norm(p - proj)
+        """
+        if end_frame is None:
+            end_frame = self.data_loader.total_frames
+
+        # Get node positions as (N, 2) arrays
+        back_pos = self.data_loader.get_node_positions(self.node_mapping.back, start_frame, end_frame, instance)
+        nose_pos = self.data_loader.get_node_positions(self.node_mapping.nose, start_frame, end_frame, instance)
+        head_pos = self.data_loader.get_node_positions(self.node_mapping.head, start_frame, end_frame, instance)
+
+        # NaN mask
+        nan_mask = (np.any(np.isnan(head_pos), axis=1) |
+                    np.any(np.isnan(back_pos), axis=1) |
+                    np.any(np.isnan(nose_pos), axis=1))
+
+        # Vectorized point-to-line distance (projection method, matches point_line_distance)
+        ab = nose_pos - back_pos      # line direction: back -> nose, shape (N, 2)
+        ap = head_pos - back_pos      # point offset: back -> head, shape (N, 2)
+
+        dot_ab_ab = np.sum(ab * ab, axis=1)   # |ab|^2 per frame
+
+        # Degenerate case: back and nose at same position
+        degenerate_mask = dot_ab_ab == 0
+        dot_ab_ab_safe = np.where(degenerate_mask, 1.0, dot_ab_ab)
+
+        dot_ap_ab = np.sum(ap * ab, axis=1)
+        t = dot_ap_ab / dot_ab_ab_safe
+
+        # Projection point and distance
+        proj = back_pos + t[:, np.newaxis] * ab
+        diff = head_pos - proj
+        distances = np.sqrt(np.sum(diff**2, axis=1))
+
+        # Degenerate case: distance is simply norm(head - back)
+        degenerate_distances = np.sqrt(np.sum(ap**2, axis=1))
+        distances = np.where(degenerate_mask, degenerate_distances, distances)
+
+        # Apply NaN mask
+        distances[nan_mask] = np.nan
+
+        # Interpolate NaN values if present (same as original)
+        if np.isnan(distances).any():
+            distances = pd.Series(distances).interpolate(method=interpolation_method).fillna(0).to_numpy()
+
+        return distances
     
     def validate_node_mapping(self) -> Dict[str, bool]:
         """Validate that node indices are valid for the loaded data."""

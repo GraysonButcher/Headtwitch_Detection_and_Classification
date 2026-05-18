@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QPushButton, QLineEdit, QProgressBar, QTextEdit, QMessageBox,
     QFileDialog, QRadioButton, QButtonGroup, QDialog, QTableWidget,
-    QTableWidgetItem, QHeaderView, QComboBox
+    QTableWidgetItem, QHeaderView, QComboBox, QScrollArea
 )
 from PySide6.QtCore import Qt, QDateTime, Signal
 from PySide6.QtGui import QFont
+from .theme import Fonts, Colors, get_icon, stylesheet_status_info, stylesheet_log_area
 
 # Import workflow tracker and metadata dialog
 try:
@@ -32,6 +33,7 @@ except ImportError:
     sys.path.insert(0, current_dir)
     from workflow_tracker import WorkflowTracker
     from metadata_config_dialog import MetadataConfigDialog
+    from theme import Fonts, Colors, get_icon, stylesheet_status_info, stylesheet_log_area
 
 
 class DeployTab(QWidget):
@@ -48,7 +50,16 @@ class DeployTab(QWidget):
 
     def init_ui(self):
         """Initialize the user interface."""
-        layout = QVBoxLayout(self)
+        # Outer layout holds the scroll area
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(12)
 
@@ -79,6 +90,9 @@ class DeployTab(QWidget):
         # Final stretch
         layout.addStretch()
 
+        scroll_area.setWidget(scroll_content)
+        outer_layout.addWidget(scroll_area)
+
     def create_instructions_section(self, parent_layout):
         """Instructions header."""
         instructions_group = QGroupBox("Identify Headtwitches")
@@ -89,7 +103,7 @@ class DeployTab(QWidget):
             "<b>Use trained models to identify head-twitch responses in your data:</b> "
             "Select a model, choose processing mode (fresh or incremental), and extract features or predict HTRs."
         )
-        instructions.setFont(QFont("Arial", 10))
+        instructions.setFont(QFont(Fonts.FAMILY, 10))
         instructions.setWordWrap(True)
         instructions_layout.addWidget(instructions)
 
@@ -102,16 +116,14 @@ class DeployTab(QWidget):
         status_layout.setContentsMargins(10, 10, 10, 10)
 
         self.status_label = QLabel("No project loaded. Create or open a project to begin.")
-        self.status_label.setFont(QFont("Arial", 9))
+        self.status_label.setFont(QFont(Fonts.FAMILY, 9))
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 8px; border-radius: 4px; color: #6c757d;"
-        )
+        self.status_label.setStyleSheet(stylesheet_status_info())
         status_layout.addWidget(self.status_label)
 
         # File counts
         self.file_counts_label = QLabel("")
-        self.file_counts_label.setFont(QFont("Arial", 9))
+        self.file_counts_label.setFont(QFont(Fonts.FAMILY, 9))
         status_layout.addWidget(self.file_counts_label)
 
         parent_layout.addWidget(status_group)
@@ -123,16 +135,18 @@ class DeployTab(QWidget):
         input_layout.setContentsMargins(10, 10, 10, 10)
 
         # Add H5 files button
-        self.add_h5_btn = QPushButton("📁 Add H5 Files...")
-        self.add_h5_btn.setFont(QFont("Arial", 9))
+        self.add_h5_btn = QPushButton("Add H5 Files...")
+        self.add_h5_btn.setIcon(get_icon('open'))
+        self.add_h5_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.add_h5_btn.setToolTip("Browse and add H5 tracking files to project/input/ folder")
         self.add_h5_btn.clicked.connect(self.add_h5_files)
         self.add_h5_btn.setEnabled(False)
         input_layout.addWidget(self.add_h5_btn)
 
         # Open input folder button
-        self.open_input_btn = QPushButton("📂 Open Input Folder")
-        self.open_input_btn.setFont(QFont("Arial", 9))
+        self.open_input_btn = QPushButton("Open Input Folder")
+        self.open_input_btn.setIcon(get_icon('folder'))
+        self.open_input_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.open_input_btn.setToolTip("Open the project input folder in file explorer")
         self.open_input_btn.clicked.connect(self.open_input_folder)
         self.open_input_btn.setEnabled(False)
@@ -153,11 +167,11 @@ class DeployTab(QWidget):
         model_layout = QHBoxLayout()
         model_label = QLabel("Model:")
         model_label.setMinimumWidth(80)
-        model_label.setFont(QFont("Arial", 9))
+        model_label.setFont(QFont(Fonts.FAMILY, 9))
         model_layout.addWidget(model_label)
 
         self.model_combo = QComboBox()
-        self.model_combo.setFont(QFont("Arial", 9))
+        self.model_combo.setFont(QFont(Fonts.FAMILY, 9))
         self.model_combo.setEditable(False)
         model_layout.addWidget(self.model_combo)
 
@@ -172,12 +186,12 @@ class DeployTab(QWidget):
         param_layout = QHBoxLayout()
         param_label = QLabel("Parameters:")
         param_label.setMinimumWidth(80)
-        param_label.setFont(QFont("Arial", 9))
+        param_label.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(param_label)
 
         self.param_path_edit = QLineEdit()
         self.param_path_edit.setPlaceholderText("Optional: Load parameter configuration")
-        self.param_path_edit.setFont(QFont("Arial", 9))
+        self.param_path_edit.setFont(QFont(Fonts.FAMILY, 9))
         self.param_path_edit.setReadOnly(True)
         param_layout.addWidget(self.param_path_edit)
 
@@ -190,8 +204,8 @@ class DeployTab(QWidget):
 
         # Ear detection mode indicator
         self.ear_mode_label = QLabel("Ear Detection: Absolute Mode")
-        self.ear_mode_label.setFont(QFont("Arial", 8))
-        self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+        self.ear_mode_label.setFont(QFont(Fonts.FAMILY, 8))
+        self.ear_mode_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; padding: 2px 0;")
         config_layout.addWidget(self.ear_mode_label)
 
         parent_layout.addWidget(config_group)
@@ -207,13 +221,13 @@ class DeployTab(QWidget):
 
         # Fresh batch mode
         self.fresh_mode_radio = QRadioButton("Fresh Batch (Process all files)")
-        self.fresh_mode_radio.setFont(QFont("Arial", 9))
+        self.fresh_mode_radio.setFont(QFont(Fonts.FAMILY, 9))
         self.mode_button_group.addButton(self.fresh_mode_radio, 0)
         mode_layout.addWidget(self.fresh_mode_radio)
 
         fresh_help = QLabel("   → Extract features, predict, and generate report for all H5 files")
-        fresh_help.setFont(QFont("Arial", 8))
-        fresh_help.setStyleSheet("color: #6c757d;")
+        fresh_help.setFont(QFont(Fonts.FAMILY, 8))
+        fresh_help.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         fresh_help.setWordWrap(True)
         mode_layout.addWidget(fresh_help)
 
@@ -221,13 +235,13 @@ class DeployTab(QWidget):
 
         # Incremental mode
         self.incremental_mode_radio = QRadioButton("Incremental (Process only new files)")
-        self.incremental_mode_radio.setFont(QFont("Arial", 9))
+        self.incremental_mode_radio.setFont(QFont(Fonts.FAMILY, 9))
         self.mode_button_group.addButton(self.incremental_mode_radio, 1)
         mode_layout.addWidget(self.incremental_mode_radio)
 
         incremental_help = QLabel("   → Process only new H5 files added since last run, update existing report")
-        incremental_help.setFont(QFont("Arial", 8))
-        incremental_help.setStyleSheet("color: #6c757d;")
+        incremental_help.setFont(QFont(Fonts.FAMILY, 8))
+        incremental_help.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         incremental_help.setWordWrap(True)
         mode_layout.addWidget(incremental_help)
 
@@ -241,14 +255,16 @@ class DeployTab(QWidget):
         buttons_layout = QHBoxLayout()
 
         # Processing step buttons
-        self.step1_btn = QPushButton("1️⃣ Extract Features")
-        self.step1_btn.setFont(QFont("Arial", 9))
+        self.step1_btn = QPushButton("Extract Features")
+        self.step1_btn.setIcon(get_icon('play'))
+        self.step1_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.step1_btn.clicked.connect(self.run_extract_step)
         self.step1_btn.setEnabled(False)
         buttons_layout.addWidget(self.step1_btn)
 
-        self.step2_btn = QPushButton("2️⃣ Predict HTRs")
-        self.step2_btn.setFont(QFont("Arial", 9))
+        self.step2_btn = QPushButton("Predict HTRs")
+        self.step2_btn.setIcon(get_icon('computer'))
+        self.step2_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.step2_btn.clicked.connect(self.run_predict_step)
         self.step2_btn.setEnabled(False)
         buttons_layout.addWidget(self.step2_btn)
@@ -259,31 +275,59 @@ class DeployTab(QWidget):
 
     def create_results_section(self, parent_layout):
         """Results viewing section."""
+        results_group = QGroupBox("Results")
+        results_main_layout = QVBoxLayout(results_group)
+        results_main_layout.setContentsMargins(10, 10, 10, 10)
+        results_main_layout.setSpacing(6)
+
+        # Run selector row
+        run_selector_layout = QHBoxLayout()
+
+        run_label = QLabel("Prediction Run:")
+        run_label.setFont(QFont(Fonts.FAMILY, 9))
+        run_selector_layout.addWidget(run_label)
+
+        self.run_combo = QComboBox()
+        self.run_combo.setFont(QFont(Fonts.FAMILY, 9))
+        self.run_combo.setMinimumWidth(300)
+        self.run_combo.currentIndexChanged.connect(self._on_run_selected)
+        run_selector_layout.addWidget(self.run_combo)
+
+        self.compare_runs_btn = QPushButton("Compare Runs")
+        self.compare_runs_btn.setFont(QFont(Fonts.FAMILY, 9))
+        self.compare_runs_btn.setToolTip("Compare HTR counts between two prediction runs")
+        self.compare_runs_btn.clicked.connect(self._show_comparison_dialog)
+        self.compare_runs_btn.setEnabled(False)
+        run_selector_layout.addWidget(self.compare_runs_btn)
+
+        run_selector_layout.addStretch()
+        results_main_layout.addLayout(run_selector_layout)
+
+        # Buttons row
         results_layout = QHBoxLayout()
 
-        results_label = QLabel("View Results:")
-        results_label.setFont(QFont("Arial", 9))
-        results_layout.addWidget(results_label)
-
         # Open predictions folder button
-        self.open_predictions_btn = QPushButton("📁 Open Predictions Folder")
-        self.open_predictions_btn.setFont(QFont("Arial", 9))
+        self.open_predictions_btn = QPushButton("Open Predictions Folder")
+        self.open_predictions_btn.setIcon(get_icon('folder'))
+        self.open_predictions_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.open_predictions_btn.setToolTip("Open the predictions folder in file explorer")
         self.open_predictions_btn.clicked.connect(self.open_predictions_folder)
         self.open_predictions_btn.setEnabled(False)
         results_layout.addWidget(self.open_predictions_btn)
 
         # View results summary button
-        self.view_summary_btn = QPushButton("📊 View Results Summary")
-        self.view_summary_btn.setFont(QFont("Arial", 9))
+        self.view_summary_btn = QPushButton("View Results Summary")
+        self.view_summary_btn.setIcon(get_icon('chart'))
+        self.view_summary_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_summary_btn.setToolTip("View a summary of HTR counts for each file")
         self.view_summary_btn.clicked.connect(self.view_results_summary)
         self.view_summary_btn.setEnabled(False)
         results_layout.addWidget(self.view_summary_btn)
 
         results_layout.addStretch()
+        results_main_layout.addLayout(results_layout)
 
-        parent_layout.addLayout(results_layout)
+        parent_layout.addWidget(results_group)
 
     def create_progress_section(self, parent_layout):
         """Progress tracking and logging."""
@@ -300,16 +344,10 @@ class DeployTab(QWidget):
         # Progress text
         self.progress_text = QTextEdit()
         self.progress_text.setMaximumHeight(120)
-        self.progress_text.setFont(QFont("Consolas", 8))
+        self.progress_text.setFont(QFont(Fonts.MONO_FAMILY, 8))
         self.progress_text.setReadOnly(True)
         self.progress_text.setPlaceholderText("Processing progress will appear here...")
-        self.progress_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                color: #495057;
-            }
-        """)
+        self.progress_text.setStyleSheet(stylesheet_log_area())
         progress_layout.addWidget(self.progress_text)
 
         parent_layout.addWidget(progress_group)
@@ -330,8 +368,9 @@ class DeployTab(QWidget):
             self.status_label.setText("No project loaded. Create or open a project to begin.")
             return
 
-        # Initialize workflow tracker
-        self.workflow_tracker = WorkflowTracker(project_path)
+        # Initialize workflow tracker with saved metadata config
+        metadata_config = self.project_manager.get_metadata_config()
+        self.workflow_tracker = WorkflowTracker(project_path, metadata_config=metadata_config)
 
         # Get workflow status
         status = self.workflow_tracker.get_workflow_status()
@@ -344,6 +383,9 @@ class DeployTab(QWidget):
         # Auto-detect and load existing models and parameters
         self._auto_load_models_and_params(project_path)
 
+        # Populate the run selector dropdown
+        self._populate_run_selector()
+
         # Update file counts
         h5_total = status['h5_files']['total']
         h5_new = status['h5_files']['new']
@@ -351,7 +393,13 @@ class DeployTab(QWidget):
         features_total = status['features']['total']
         predictions_total = status['predictions']['total']
 
-        counts_text = f"📊 Files: {h5_total} H5 | {features_total} Features | {predictions_total} Predictions"
+        # Show prediction count from the active run if available
+        active_run_path = self._get_active_predictions_path()
+        if active_run_path and os.path.exists(active_run_path):
+            active_csvs = glob.glob(os.path.join(active_run_path, "*.csv"))
+            counts_text = f"📊 Files: {h5_total} H5 | {features_total} Features | {len(active_csvs)} Predictions (active run)"
+        else:
+            counts_text = f"📊 Files: {h5_total} H5 | {features_total} Features | {predictions_total} Predictions"
         if h5_new > 0:
             counts_text += f" | 🆕 {h5_new} New"
 
@@ -611,13 +659,27 @@ class DeployTab(QWidget):
         if reply != QMessageBox.Yes:
             return
 
-        # Show metadata configuration dialog
-        input_folder = os.path.join(project_path, "input")
-        metadata_dialog = MetadataConfigDialog(input_folder, self)
-        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
-            return  # User cancelled
+        # Load saved metadata config or configure
+        metadata_config = self.project_manager.get_metadata_config()
+        if metadata_config is not None:
+            reply = QMessageBox.question(
+                self,
+                "Metadata Configuration",
+                "Use existing metadata configuration?\n\nClick 'No' to reconfigure.",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            if reply == QMessageBox.Cancel:
+                return
+            if reply == QMessageBox.No:
+                metadata_config = None  # Fall through to dialog
 
-        metadata_config = metadata_dialog.get_config()
+        if metadata_config is None:
+            input_folder = os.path.join(project_path, "input")
+            metadata_dialog = MetadataConfigDialog(input_folder, self)
+            if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+                return  # User cancelled
+            metadata_config = metadata_dialog.get_config()
+            self.project_manager.save_metadata_config(metadata_config)
 
         # Run pipeline
         self.show_progress("🚀 Starting full pipeline...")
@@ -684,13 +746,27 @@ class DeployTab(QWidget):
             QMessageBox.warning(self, "Error", "No project loaded.")
             return
 
-        # Show metadata configuration dialog
-        input_folder = os.path.join(project_path, "input")
-        metadata_dialog = MetadataConfigDialog(input_folder, self)
-        if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
-            return  # User cancelled
+        # Load saved metadata config or configure
+        metadata_config = self.project_manager.get_metadata_config()
+        if metadata_config is not None:
+            reply = QMessageBox.question(
+                self,
+                "Metadata Configuration",
+                "Use existing metadata configuration?\n\nClick 'No' to reconfigure.",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            if reply == QMessageBox.Cancel:
+                return
+            if reply == QMessageBox.No:
+                metadata_config = None  # Fall through to dialog
 
-        metadata_config = metadata_dialog.get_config()
+        if metadata_config is None:
+            input_folder = os.path.join(project_path, "input")
+            metadata_dialog = MetadataConfigDialog(input_folder, self)
+            if metadata_dialog.exec() != MetadataConfigDialog.Accepted:
+                return  # User cancelled
+            metadata_config = metadata_dialog.get_config()
+            self.project_manager.save_metadata_config(metadata_config)
 
         mode = "incremental" if self.incremental_mode_radio.isChecked() else "fresh"
         success = self._extract_features_internal(mode, metadata_config)
@@ -788,7 +864,7 @@ class DeployTab(QWidget):
                 if not new_h5_files:
                     self.show_progress("No new H5 files to process")
                     return True
-                h5_files_to_process = [os.path.join(input_folder, f) for f in new_h5_files]
+                h5_files_to_process = new_h5_files  # Already full paths from detect_new_h5_files()
                 self.show_progress(f"Processing {len(h5_files_to_process)} new H5 files...")
             else:
                 # Fresh mode - process all
@@ -811,6 +887,11 @@ class DeployTab(QWidget):
                     # Use extractor's method for output filename (handles metadata if configured)
                     output_filename = batch_extractor.get_output_filename(h5_file)
                     output_path = os.path.join(features_folder, output_filename)
+
+                    if os.path.exists(output_path):
+                        self.show_progress(f"⏭ Skipping {output_filename} (already exists)")
+                        files_processed += 1
+                        continue
 
                     self.show_progress(f"Processing: {os.path.basename(h5_file)}")
                     features_df = batch_extractor.process_file(h5_file, output_path)
@@ -847,8 +928,8 @@ class DeployTab(QWidget):
 
             # Set up paths
             features_folder = os.path.join(project_path, "features")
-            predictions_folder = os.path.join(project_path, "predictions")
-            os.makedirs(predictions_folder, exist_ok=True)
+            predictions_root = os.path.join(project_path, "predictions")
+            os.makedirs(predictions_root, exist_ok=True)
 
             # Load model
             model_path = self._get_selected_model_path()
@@ -861,25 +942,45 @@ class DeployTab(QWidget):
 
             self.show_progress("Model loaded successfully")
 
+            # Create versioned run subfolder
+            run_folder_name = self._generate_run_folder_name(model_path)
+            run_folder = os.path.join(predictions_root, run_folder_name)
+            os.makedirs(run_folder, exist_ok=True)
+            self.show_progress(f"Prediction run folder: {run_folder_name}")
+
             # Determine files to predict based on mode
             if mode == 'incremental':
-                unpredicted_features, _ = self.workflow_tracker.detect_unpredicted_features()
+                # Check unpredicted against the active run
+                active_path = self._get_active_predictions_path()
+                unpredicted_features, _ = self.workflow_tracker.detect_unpredicted_features(
+                    run_path=active_path
+                )
                 if not unpredicted_features:
                     self.show_progress("No new feature files to predict")
                     return True
                 self.show_progress(f"Predicting {len(unpredicted_features)} new feature files...")
-                # For incremental, we'll selectively process by copying to temp folder
-                # (simpler approach - full folder predict filters by what exists)
             else:
                 self.show_progress("Predicting all feature files...")
 
-            # Run prediction
-            result = predictor.predict_folder(features_folder, predictions_folder)
+            # Run prediction into the new run subfolder
+            result = predictor.predict_folder(features_folder, run_folder)
 
             if result['success']:
                 self.show_progress(f"✓ Prediction complete: {result['files_processed']} files")
                 if result.get('files_failed', 0) > 0:
                     self.show_progress(f"⚠ {result['files_failed']} files failed")
+
+                # Store the new run path for report generation in the same pipeline call
+                self._latest_run_path = run_folder
+
+                # Refresh run selector and auto-select the new run
+                self._populate_run_selector()
+                # Select the new run (should be first non-legacy entry)
+                for i in range(self.run_combo.count()):
+                    if self.run_combo.itemData(i) == run_folder:
+                        self.run_combo.setCurrentIndex(i)
+                        break
+
                 return True
             else:
                 self.show_progress(f"❌ Prediction failed: {result.get('error', 'Unknown error')}")
@@ -904,21 +1005,29 @@ class DeployTab(QWidget):
             from core.ml_models import HTRPredictor
             from datetime import datetime
 
-            # Set up paths
-            predictions_folder = os.path.join(project_path, "predictions")
+            # Use the active run path (prefer _latest_run_path from same pipeline call)
+            active_run_path = getattr(self, '_latest_run_path', None)
+            if not active_run_path:
+                active_run_path = self._get_active_predictions_path()
+            if not active_run_path:
+                active_run_path = os.path.join(project_path, "predictions")
+
             reports_folder = os.path.join(project_path, "reports")
             os.makedirs(reports_folder, exist_ok=True)
 
-            # Generate report filename
+            # Generate report filename including run name
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             project_name = project_config.get("project_name", "HTR_Analysis")
-            report_path = os.path.join(reports_folder, f"{project_name}_Report_{timestamp}.xlsx")
+            run_name = os.path.basename(active_run_path)
+            if run_name == "predictions":
+                run_name = "legacy"
+            report_path = os.path.join(reports_folder, f"{project_name}_{run_name}_Report_{timestamp}.xlsx")
 
-            self.show_progress("Compiling prediction results...")
+            self.show_progress(f"Compiling prediction results from run: {run_name}")
 
             # Use HTRPredictor to compile results
             predictor = HTRPredictor()
-            result = predictor.compile_results(predictions_folder, report_path)
+            result = predictor.compile_results(active_run_path, report_path)
 
             if result['success']:
                 self.show_progress(f"✓ Report generated: {os.path.basename(report_path)}")
@@ -1034,7 +1143,7 @@ class DeployTab(QWidget):
             )
 
     def open_predictions_folder(self):
-        """Open the project predictions folder in file explorer."""
+        """Open the active prediction run's folder in file explorer."""
         if not self.project_manager:
             return
 
@@ -1043,9 +1152,12 @@ class DeployTab(QWidget):
             QMessageBox.warning(self, "Error", "No project loaded.")
             return
 
-        predictions_folder = os.path.join(project_path, "predictions")
+        # Use the active run's subfolder
+        folder_to_open = self._get_active_predictions_path()
+        if not folder_to_open:
+            folder_to_open = os.path.join(project_path, "predictions")
 
-        if not os.path.exists(predictions_folder):
+        if not os.path.exists(folder_to_open):
             QMessageBox.warning(
                 self,
                 "Folder Not Found",
@@ -1056,11 +1168,11 @@ class DeployTab(QWidget):
         # Open folder in file explorer (cross-platform)
         try:
             if sys.platform == 'win32':
-                os.startfile(predictions_folder)
+                os.startfile(folder_to_open)
             elif sys.platform == 'darwin':  # macOS
-                subprocess.Popen(['open', predictions_folder])
+                subprocess.Popen(['open', folder_to_open])
             else:  # Linux
-                subprocess.Popen(['xdg-open', predictions_folder])
+                subprocess.Popen(['xdg-open', folder_to_open])
         except Exception as e:
             QMessageBox.warning(
                 self,
@@ -1069,7 +1181,7 @@ class DeployTab(QWidget):
             )
 
     def view_results_summary(self):
-        """View a summary of HTR predictions."""
+        """View a summary of HTR predictions for the active run."""
         if not self.project_manager:
             return
 
@@ -1078,7 +1190,10 @@ class DeployTab(QWidget):
             QMessageBox.warning(self, "Error", "No project loaded.")
             return
 
-        predictions_folder = os.path.join(project_path, "predictions")
+        # Use the active run's folder
+        predictions_folder = self._get_active_predictions_path()
+        if not predictions_folder:
+            predictions_folder = os.path.join(project_path, "predictions")
 
         if not os.path.exists(predictions_folder):
             QMessageBox.warning(
@@ -1105,21 +1220,26 @@ class DeployTab(QWidget):
             )
             return
 
+        # Determine run name for the dialog title
+        run_name = os.path.basename(predictions_folder)
+        if run_name == "predictions":
+            run_name = "legacy"
+
         # Create summary dialog
         dialog = QDialog(self)
-        dialog.setWindowTitle("HTR Results Summary")
+        dialog.setWindowTitle(f"HTR Results Summary — {run_name}")
         dialog.setMinimumSize(500, 400)
 
         layout = QVBoxLayout(dialog)
 
         # Info label
         info_label = QLabel(f"Summary of HTR predictions for {len(prediction_files)} file(s):")
-        info_label.setFont(QFont("Arial", 10))
+        info_label.setFont(QFont(Fonts.FAMILY, 10))
         layout.addWidget(info_label)
 
         # Instruction label
         instruction_label = QLabel("Click on any file to view individual HTR events")
-        instruction_label.setFont(QFont("Arial", 9))
+        instruction_label.setFont(QFont(Fonts.FAMILY, 9))
         instruction_label.setStyleSheet("color: #6c757d; font-style: italic; margin-bottom: 5px;")
         layout.addWidget(instruction_label)
 
@@ -1128,7 +1248,7 @@ class DeployTab(QWidget):
         table.setColumnCount(2)
         table.setHorizontalHeaderLabels(["File", "HTR Count"])
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        table.setFont(QFont("Arial", 9))
+        table.setFont(QFont(Fonts.FAMILY, 9))
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -1164,11 +1284,11 @@ class DeployTab(QWidget):
         totals_row = len(summary_data)
 
         total_item = QTableWidgetItem("TOTAL")
-        total_item.setFont(QFont("Arial", 9, QFont.Bold))
+        total_item.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
         table.setItem(totals_row, 0, total_item)
 
         total_htrs_item = QTableWidgetItem(str(total_htrs_all))
-        total_htrs_item.setFont(QFont("Arial", 9, QFont.Bold))
+        total_htrs_item.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
         table.setItem(totals_row, 1, total_htrs_item)
 
         # Connect row click to detail view
@@ -1185,7 +1305,14 @@ class DeployTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        export_csv_btn = QPushButton("📄 Export to CSV")
+        combine_btn = QPushButton("Combine All Files")
+        combine_btn.setIcon(get_icon('combine'))
+        combine_btn.setToolTip("Merge all prediction CSVs into a single file with corrected Rat IDs")
+        combine_btn.clicked.connect(lambda: self.combine_all_predictions(summary_data))
+        button_layout.addWidget(combine_btn)
+
+        export_csv_btn = QPushButton("Export to CSV")
+        export_csv_btn.setIcon(get_icon('save'))
         export_csv_btn.clicked.connect(lambda: self.export_results_to_csv(summary_data))
         button_layout.addWidget(export_csv_btn)
 
@@ -1287,15 +1414,22 @@ class DeployTab(QWidget):
             # Create DataFrame
             export_df = pd.DataFrame(export_data)
 
-            # Generate filename
+            # Generate filename (include run name)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             project_name = project_config.get("project_name", "HTR_Analysis")
+
+            active_run_path = self._get_active_predictions_path()
+            run_name = ""
+            if active_run_path:
+                rn = os.path.basename(active_run_path)
+                if rn != "predictions":
+                    run_name = f"_{rn}"
 
             # Save to reports folder
             reports_folder = os.path.join(project_path, "reports")
             os.makedirs(reports_folder, exist_ok=True)
 
-            csv_filename = f"{project_name}_HTR_Summary_{timestamp}.csv"
+            csv_filename = f"{project_name}{run_name}_HTR_Summary_{timestamp}.csv"
             csv_path = os.path.join(reports_folder, csv_filename)
 
             # Export to CSV
@@ -1318,6 +1452,109 @@ class DeployTab(QWidget):
                 self,
                 "Export Failed",
                 f"Could not export HTR summary:\n{str(e)}"
+            )
+
+    def _repair_rat_id(self, filename: str) -> str:
+        """Re-parse rat ID from a prediction filename.
+
+        Looks for the last underscore-separated segment that is 3+ digits
+        optionally followed by a single letter (e.g., 6011f, 6010, 1001a).
+        """
+        import re
+
+        # Strip suffixes to get back to the original naming parts
+        base = filename
+        for suffix in ['.csv', '.h5', '_htr_features_predicted', '_predictions',
+                       '_htr_features', '_predicted']:
+            base = base.replace(suffix, '')
+
+        parts = base.split('_')
+        for part in reversed(parts):
+            if re.match(r'^\d{3,}[a-zA-Z]?$', part):
+                return part
+        return 'unknown'
+
+    def combine_all_predictions(self, summary_data):
+        """Combine all prediction CSVs into a single file with corrected Rat IDs."""
+        if not self.project_manager:
+            return
+
+        project_path, project_config = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        try:
+            frames = []
+
+            for data in summary_data:
+                pred_file = data['pred_file']
+                try:
+                    df = pd.read_csv(pred_file)
+
+                    # Add source filename column
+                    df['source_file'] = data['file']
+
+                    # Repair rat_id from the filename
+                    corrected_id = self._repair_rat_id(os.path.basename(pred_file))
+                    if 'rat_id' in df.columns:
+                        df['rat_id'] = corrected_id
+                    else:
+                        df.insert(0, 'rat_id', corrected_id)
+
+                    frames.append(df)
+                except Exception as e:
+                    print(f"Error reading {pred_file}: {e}")
+
+            if not frames:
+                QMessageBox.warning(self, "No Data", "No prediction files could be read.")
+                return
+
+            combined = pd.concat(frames, ignore_index=True)
+
+            # Save to reports folder
+            reports_folder = os.path.join(project_path, "reports")
+            os.makedirs(reports_folder, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            project_name = project_config.get("project_name", "HTR_Analysis")
+
+            active_run_path = self._get_active_predictions_path()
+            run_name = ""
+            if active_run_path:
+                rn = os.path.basename(active_run_path)
+                if rn != "predictions":
+                    run_name = f"_{rn}"
+
+            csv_filename = f"{project_name}{run_name}_combined_{timestamp}.csv"
+            csv_path = os.path.join(reports_folder, csv_filename)
+
+            combined.to_csv(csv_path, index=False)
+
+            # Count repaired IDs
+            unique_ids = combined['rat_id'].nunique()
+            total_rows = len(combined)
+            htr_count = len(combined[combined['prediction'] == 1]) if 'prediction' in combined.columns else 0
+
+            self.show_progress(f"Combined {len(frames)} files into: {csv_filename}")
+
+            QMessageBox.information(
+                self,
+                "Combined Successfully",
+                f"All prediction files combined!\n\n"
+                f"File: {csv_filename}\n"
+                f"Location: {reports_folder}\n\n"
+                f"Files combined: {len(frames)}\n"
+                f"Total rows: {total_rows}\n"
+                f"Total HTR events: {htr_count}\n"
+                f"Unique Rat IDs (repaired): {unique_ids}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Combine Failed",
+                f"Could not combine prediction files:\n{str(e)}"
             )
 
     def show_htr_detail(self, pred_file_path, filename):
@@ -1356,7 +1593,7 @@ class DeployTab(QWidget):
 
             # Header info
             header_label = QLabel(f"<b>{filename}</b> - {len(htr_df)} HTR event(s) detected (FPS: {fps})")
-            header_label.setFont(QFont("Arial", 10))
+            header_label.setFont(QFont(Fonts.FAMILY, 10))
             layout.addWidget(header_label)
 
             # Create detail table
@@ -1364,7 +1601,7 @@ class DeployTab(QWidget):
             detail_table.setColumnCount(3)
             detail_table.setHorizontalHeaderLabels(["Event #", "Start Frame", "Start Time (hh:mm:ss)"])
             detail_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-            detail_table.setFont(QFont("Arial", 9))
+            detail_table.setFont(QFont(Fonts.FAMILY, 9))
             detail_table.setAlternatingRowColors(True)
 
             # Populate detail table
@@ -1407,6 +1644,253 @@ class DeployTab(QWidget):
                 f"Could not load HTR details:\n{str(e)}"
             )
 
+    # ── Run management helpers ──────────────────────────────────────────
+
+    def _generate_run_folder_name(self, model_path):
+        """Return a run folder name like ``{model_stem}_{YYYYMMDD}_{HHMMSS}``."""
+        model_stem = os.path.splitext(os.path.basename(model_path))[0]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{model_stem}_{timestamp}"
+
+    def _enumerate_prediction_runs(self, predictions_folder):
+        """List all prediction run subfolders + detect legacy flat CSVs.
+
+        Returns a list of dicts sorted most-recent-first::
+
+            [{run_name, run_path, is_legacy, csv_count}, ...]
+        """
+        runs = []
+        if not os.path.exists(predictions_folder):
+            return runs
+
+        # Check for legacy flat CSVs in root
+        root_csvs = glob.glob(os.path.join(predictions_folder, "*.csv"))
+        if root_csvs:
+            runs.append({
+                'run_name': 'legacy',
+                'run_path': predictions_folder,
+                'is_legacy': True,
+                'csv_count': len(root_csvs),
+            })
+
+        # Check subfolders
+        try:
+            entries = sorted(os.listdir(predictions_folder), reverse=True)
+        except OSError:
+            entries = []
+
+        for entry in entries:
+            subfolder = os.path.join(predictions_folder, entry)
+            if not os.path.isdir(subfolder):
+                continue
+            csvs = glob.glob(os.path.join(subfolder, "*.csv"))
+            if csvs:
+                runs.append({
+                    'run_name': entry,
+                    'run_path': subfolder,
+                    'is_legacy': False,
+                    'csv_count': len(csvs),
+                })
+
+        # Sort: non-legacy runs by name descending (newest timestamp first), legacy last
+        non_legacy = [r for r in runs if not r['is_legacy']]
+        legacy = [r for r in runs if r['is_legacy']]
+        non_legacy.sort(key=lambda r: r['run_name'], reverse=True)
+        return non_legacy + legacy
+
+    def _get_active_predictions_path(self):
+        """Return the folder path of the currently selected prediction run."""
+        data = self.run_combo.currentData()
+        return data if data else None
+
+    def _populate_run_selector(self):
+        """Fill the run combo from enumeration, auto-select most recent."""
+        if not self.project_manager:
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            return
+
+        predictions_folder = os.path.join(project_path, "predictions")
+        runs = self._enumerate_prediction_runs(predictions_folder)
+
+        # Block signals to avoid triggering _on_run_selected during population
+        self.run_combo.blockSignals(True)
+        self.run_combo.clear()
+
+        if not runs:
+            self.run_combo.addItem("No prediction runs", "")
+        else:
+            for run in runs:
+                label = run['run_name']
+                if run['is_legacy']:
+                    label = f"legacy ({run['csv_count']} files)"
+                else:
+                    label = f"{run['run_name']} ({run['csv_count']} files)"
+                self.run_combo.addItem(label, run['run_path'])
+
+        self.run_combo.blockSignals(False)
+
+        # Enable compare button when 2+ runs exist
+        self.compare_runs_btn.setEnabled(len(runs) >= 2)
+
+        # Trigger update for selected run
+        self._on_run_selected(self.run_combo.currentIndex())
+
+    def _on_run_selected(self, index):
+        """Handle combo box selection change — update button states."""
+        active_path = self._get_active_predictions_path()
+        has_run = bool(active_path and os.path.exists(active_path))
+        self.open_predictions_btn.setEnabled(has_run)
+        self.view_summary_btn.setEnabled(has_run)
+
+    def _load_htr_counts(self, run_path):
+        """Load ``{filename: htr_count}`` dict from a prediction run folder."""
+        counts = {}
+        if not run_path or not os.path.exists(run_path):
+            return counts
+
+        csv_files = glob.glob(os.path.join(run_path, "*.csv"))
+        for csv_file in csv_files:
+            try:
+                df = pd.read_csv(csv_file)
+                filename = os.path.basename(csv_file)
+                htr_count = len(df[df['prediction'] == 1])
+                counts[filename] = htr_count
+            except Exception:
+                continue
+        return counts
+
+    def _show_comparison_dialog(self):
+        """Side-by-side HTR count comparison between two runs."""
+        if not self.project_manager:
+            return
+
+        project_path, _ = self.project_manager.get_current_project()
+        if not project_path:
+            return
+
+        predictions_folder = os.path.join(project_path, "predictions")
+        runs = self._enumerate_prediction_runs(predictions_folder)
+
+        if len(runs) < 2:
+            QMessageBox.information(self, "Compare Runs", "Need at least 2 prediction runs to compare.")
+            return
+
+        # Build comparison dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Compare Prediction Runs")
+        dialog.setMinimumSize(700, 500)
+
+        layout = QVBoxLayout(dialog)
+
+        # Run selectors
+        selectors_layout = QHBoxLayout()
+
+        selectors_layout.addWidget(QLabel("Run A:"))
+        combo_a = QComboBox()
+        combo_a.setFont(QFont(Fonts.FAMILY, 9))
+        for run in runs:
+            label = run['run_name'] if not run['is_legacy'] else "legacy"
+            combo_a.addItem(f"{label} ({run['csv_count']} files)", run['run_path'])
+        selectors_layout.addWidget(combo_a)
+
+        selectors_layout.addWidget(QLabel("Run B:"))
+        combo_b = QComboBox()
+        combo_b.setFont(QFont(Fonts.FAMILY, 9))
+        for run in runs:
+            label = run['run_name'] if not run['is_legacy'] else "legacy"
+            combo_b.addItem(f"{label} ({run['csv_count']} files)", run['run_path'])
+        if len(runs) > 1:
+            combo_b.setCurrentIndex(1)
+        selectors_layout.addWidget(combo_b)
+
+        compare_btn = QPushButton("Compare")
+        compare_btn.setFont(QFont(Fonts.FAMILY, 9))
+        selectors_layout.addWidget(compare_btn)
+
+        selectors_layout.addStretch()
+        layout.addLayout(selectors_layout)
+
+        # Results table
+        table = QTableWidget()
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["File", "Run A HTRs", "Run B HTRs", "Delta"])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        table.setFont(QFont(Fonts.FAMILY, 9))
+        table.setAlternatingRowColors(True)
+        layout.addWidget(table)
+
+        def do_compare():
+            path_a = combo_a.currentData()
+            path_b = combo_b.currentData()
+            counts_a = self._load_htr_counts(path_a)
+            counts_b = self._load_htr_counts(path_b)
+
+            all_files = sorted(set(counts_a.keys()) | set(counts_b.keys()))
+            table.setRowCount(len(all_files) + 1)  # +1 for totals
+
+            total_a = 0
+            total_b = 0
+
+            for row, filename in enumerate(all_files):
+                table.setItem(row, 0, QTableWidgetItem(filename))
+
+                a_val = counts_a.get(filename)
+                b_val = counts_b.get(filename)
+
+                a_str = str(a_val) if a_val is not None else "-"
+                b_str = str(b_val) if b_val is not None else "-"
+
+                table.setItem(row, 1, QTableWidgetItem(a_str))
+                table.setItem(row, 2, QTableWidgetItem(b_str))
+
+                if a_val is not None and b_val is not None:
+                    delta = b_val - a_val
+                    delta_str = f"+{delta}" if delta > 0 else str(delta)
+                    table.setItem(row, 3, QTableWidgetItem(delta_str))
+                else:
+                    table.setItem(row, 3, QTableWidgetItem("-"))
+
+                total_a += a_val if a_val is not None else 0
+                total_b += b_val if b_val is not None else 0
+
+            # Totals row
+            totals_row = len(all_files)
+            total_label = QTableWidgetItem("TOTAL")
+            total_label.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
+            table.setItem(totals_row, 0, total_label)
+
+            ta = QTableWidgetItem(str(total_a))
+            ta.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
+            table.setItem(totals_row, 1, ta)
+
+            tb = QTableWidgetItem(str(total_b))
+            tb.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
+            table.setItem(totals_row, 2, tb)
+
+            delta_total = total_b - total_a
+            delta_str = f"+{delta_total}" if delta_total > 0 else str(delta_total)
+            td = QTableWidgetItem(delta_str)
+            td.setFont(QFont(Fonts.FAMILY, 9, QFont.Bold))
+            table.setItem(totals_row, 3, td)
+
+        compare_btn.clicked.connect(do_compare)
+
+        # Close button
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        # Auto-compare on open
+        do_compare()
+
+        dialog.exec()
+
     def _update_ear_mode_label(self):
         """Update the ear detection mode label based on current config."""
         try:
@@ -1419,10 +1903,10 @@ class DeployTab(QWidget):
                     self.ear_mode_label.setStyleSheet("color: #1565c0; font-weight: bold; padding: 2px 0;")
                 else:
                     self.ear_mode_label.setText("Ear Detection: Absolute Mode")
-                    self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+                    self.ear_mode_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; padding: 2px 0;")
         except Exception:
             self.ear_mode_label.setText("Ear Detection: Absolute Mode")
-            self.ear_mode_label.setStyleSheet("color: #666; padding: 2px 0;")
+            self.ear_mode_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; padding: 2px 0;")
 
     def show_progress(self, message):
         """Show progress message."""

@@ -84,3 +84,8 @@ desktop.ini
 *.bak
 *.swp
 *~.nib
+
+# Local-only working files
+nul
+gui_v2_backups/
+test1/

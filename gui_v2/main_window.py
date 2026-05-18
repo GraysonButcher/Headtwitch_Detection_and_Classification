@@ -19,10 +19,10 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QWidget,
     QHBoxLayout, QLabel, QPushButton, QGroupBox, QLineEdit, QFileDialog,
     QProgressBar, QTextEdit, QMessageBox, QDialog, QTableWidget,
-    QTableWidgetItem, QHeaderView, QSplitter
+    QTableWidgetItem, QHeaderView, QSplitter, QScrollArea, QCheckBox
 )
 from PySide6.QtCore import Qt, QDateTime
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QFont, QPixmap, QShortcut, QKeySequence
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -58,6 +58,11 @@ except ImportError:
     from project_manager import ProjectManager
     from video_inspector_widget import VideoInspectorWidget
     from diagnostics_graph_widget import DiagnosticsGraphWidget
+
+try:
+    from .theme import Colors, Fonts, Spacing, get_icon, stylesheet_button_success, stylesheet_button_primary, stylesheet_status_info, stylesheet_status_warning, stylesheet_status_success, stylesheet_status_dynamic, stylesheet_log_area, stylesheet_separator
+except ImportError:
+    from theme import Colors, Fonts, Spacing, get_icon, stylesheet_button_success, stylesheet_button_primary, stylesheet_status_info, stylesheet_status_warning, stylesheet_status_success, stylesheet_status_dynamic, stylesheet_log_area, stylesheet_separator
 
 
 class CachedDataLoader:
@@ -115,7 +120,8 @@ class HTRAnalysisAppV3(QMainWindow):
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("HTR Analysis Tool v3")
-        self.setFixedSize(1400, 750)
+        self.setMinimumSize(1200, 700)
+        self.resize(1400, 750)
 
         # Create menu bar
         self.create_menu_bar()
@@ -131,7 +137,7 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Create tab widget
         self.tab_widget = QTabWidget()
-        self.tab_widget.setMaximumHeight(700)
+        # Tab widget fills available space (no max height constraint)
         layout.addWidget(self.tab_widget)
 
         # Create tabs
@@ -139,8 +145,13 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Create status bar
         self.status_bar = self.statusBar()
+        self.status_message_label = QLabel("Ready")
+        self.status_bar.addWidget(self.status_message_label)
         self.project_status_label = QLabel("No project loaded")
         self.status_bar.addPermanentWidget(self.project_status_label)
+
+        # Set up keyboard shortcuts for tab navigation
+        self.setup_keyboard_shortcuts()
 
         # Initialize project manager
         try:
@@ -173,6 +184,20 @@ class HTRAnalysisAppV3(QMainWindow):
         exit_action = file_menu.addAction("Exit")
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
+
+        # View menu — tab navigation
+        view_menu = menubar.addMenu("&View")
+
+        tab_names = [
+            ("1. Welcome", "Ctrl+1"),
+            ("2. Tune Parameters", "Ctrl+2"),
+            ("3. Prepare Data", "Ctrl+3"),
+            ("4. Train Model", "Ctrl+4"),
+            ("5. Identify Headtwitches", "Ctrl+5"),
+        ]
+        for idx, (name, shortcut) in enumerate(tab_names):
+            action = view_menu.addAction(f"{name}\t{shortcut}")
+            action.triggered.connect(lambda checked, i=idx: self.switch_to_tab(i))
 
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -257,43 +282,37 @@ class HTRAnalysisAppV3(QMainWindow):
             self.welcome_tab.prepare_data_requested.connect(lambda: self.switch_to_tab(2))
             self.welcome_tab.train_model_requested.connect(lambda: self.switch_to_tab(3))
             self.welcome_tab.deploy_requested.connect(lambda: self.switch_to_tab(4))
-            self.tab_widget.addTab(self.welcome_tab, "Welcome")
+            self.tab_widget.addTab(self.welcome_tab, "1. Welcome")
         except Exception as e:
             # Fallback if welcome tab fails
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Welcome Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Welcome")
+            self.tab_widget.addTab(fallback_widget, "1. Welcome")
 
     def create_tune_parameters_tab(self):
         """Tab 2: Tune Parameters with video feedback."""
-        param_widget = QWidget()
-        param_layout = QHBoxLayout(param_widget)
-        param_layout.setContentsMargins(5, 5, 5, 5)
-        param_layout.setSpacing(10)
+        # Use a horizontal splitter so user can resize video vs graph/params
+        h_splitter = QSplitter(Qt.Horizontal)
+        h_splitter.setContentsMargins(5, 5, 5, 5)
 
-        # LEFT SIDE: Video Inspector (690px)
+        # LEFT SIDE: Video Inspector
         try:
             self.video_inspector = VideoInspectorWidget(parent=self)
-            self.video_inspector.setMaximumWidth(690)
-            param_layout.addWidget(self.video_inspector)
+            h_splitter.addWidget(self.video_inspector)
         except Exception as e:
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Video Inspector Error: {str(e)}"))
-            fallback_widget.setMaximumWidth(690)
-            param_layout.addWidget(fallback_widget)
+            h_splitter.addWidget(fallback_widget)
             self.video_inspector = None
 
-        # RIGHT SIDE: Resizable Graph + Parameter Panel (690px)
-        # Use QSplitter for user-adjustable sizing
+        # RIGHT SIDE: Vertical splitter for Graph + Parameter Panel
         right_splitter = QSplitter(Qt.Vertical)
-        right_splitter.setMaximumWidth(690)
 
         # Top: Diagnostics Graph (resizable)
         try:
             self.diagnostics_graph = DiagnosticsGraphWidget(parent=self)
-            # Remove fixed height - splitter will handle sizing
             right_splitter.addWidget(self.diagnostics_graph)
         except Exception as e:
             fallback_label = QLabel(f"Graph Widget Error: {str(e)}")
@@ -311,11 +330,13 @@ class HTRAnalysisAppV3(QMainWindow):
             right_splitter.addWidget(fallback_label)
             self.parameter_panel = None
 
-        # Set initial sizes: Give graph ~455px, parameters ~245px (total 700px)
-        # This gives the graph significantly more space than before
+        # Set initial sizes for vertical splitter: graph ~455px, parameters ~245px
         right_splitter.setSizes([455, 245])
 
-        param_layout.addWidget(right_splitter)
+        h_splitter.addWidget(right_splitter)
+
+        # Set initial sizes for horizontal splitter: video ~690px, right ~690px
+        h_splitter.setSizes([690, 690])
 
         # WIRE UP SIGNALS
         if self.video_inspector and self.diagnostics_graph and self.parameter_panel:
@@ -330,7 +351,7 @@ class HTRAnalysisAppV3(QMainWindow):
             self.parameter_panel.reanalyze_view_requested.connect(self.reanalyze_current_view)
             self.parameter_panel.reanalyze_full_requested.connect(self.reanalyze_full_video)
 
-        self.tab_widget.addTab(param_widget, "Tune Parameters")
+        self.tab_widget.addTab(h_splitter, "2. Tune Parameters")
 
     def create_prepare_data_tab(self):
         """Tab 3: Prepare Data - Feature extraction + Ground truth labeling."""
@@ -339,13 +360,13 @@ class HTRAnalysisAppV3(QMainWindow):
             # Connect signals
             self.prepare_data_tab.features_extracted.connect(self.on_features_extracted)
             self.prepare_data_tab.labels_updated.connect(self.on_labels_updated)
-            self.tab_widget.addTab(self.prepare_data_tab, "Prepare Data")
+            self.tab_widget.addTab(self.prepare_data_tab, "3. Prepare Data")
         except Exception as e:
             # Fallback
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Prepare Data Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Prepare Data")
+            self.tab_widget.addTab(fallback_widget, "3. Prepare Data")
 
     def create_train_model_tab(self):
         """Tab 4: Train Model with evaluation and iteration."""
@@ -359,7 +380,7 @@ class HTRAnalysisAppV3(QMainWindow):
 
         # Separator
         separator = QLabel()
-        separator.setStyleSheet("background-color: #dee2e6; min-height: 2px; max-height: 2px;")
+        separator.setStyleSheet(stylesheet_separator())
         layout.addWidget(separator)
 
         # Section B: Evaluate & Iterate (NEW)
@@ -370,41 +391,82 @@ class HTRAnalysisAppV3(QMainWindow):
 
         layout.addStretch()
 
-        self.tab_widget.addTab(training_widget, "Train Model")
+        self.tab_widget.addTab(training_widget, "4. Train Model")
 
     def create_training_config_section(self, parent_layout):
         """Training configuration section."""
         config_group = QGroupBox("Configure & Train Model")
-        config_group.setFont(QFont("Arial", 10, QFont.Bold))
+        config_group.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
         config_layout = QVBoxLayout(config_group)
         config_layout.setContentsMargins(10, 15, 10, 10)
         config_layout.setSpacing(10)
 
         # Training data status display
         self.training_status_label = QLabel("Loading training data...")
-        self.training_status_label.setFont(QFont("Arial", 9))
+        self.training_status_label.setFont(QFont(Fonts.FAMILY, 9))
         self.training_status_label.setWordWrap(True)
-        self.training_status_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 10px; border-radius: 4px;"
-        )
+        self.training_status_label.setStyleSheet(stylesheet_status_info())
         config_layout.addWidget(self.training_status_label)
 
         # Refresh button
-        refresh_training_btn = QPushButton("🔄 Refresh Training Data")
-        refresh_training_btn.setFont(QFont("Arial", 9))
+        refresh_training_btn = QPushButton("Refresh Training Data")
+        refresh_training_btn.setIcon(get_icon('reload'))
+        refresh_training_btn.setFont(QFont(Fonts.FAMILY, 9))
         refresh_training_btn.clicked.connect(self.refresh_training_status)
         config_layout.addWidget(refresh_training_btn)
+
+        # Feature Selection group
+        feature_sel_group = QGroupBox("Feature Selection")
+        feature_sel_group.setFont(QFont(Fonts.FAMILY, 9))
+        feature_sel_layout = QVBoxLayout(feature_sel_group)
+        feature_sel_layout.setContentsMargins(8, 10, 8, 8)
+        feature_sel_layout.setSpacing(4)
+
+        # Buttons row + count label
+        feat_btn_layout = QHBoxLayout()
+        self.feat_select_all_btn = QPushButton("Select All")
+        self.feat_select_all_btn.setFont(QFont(Fonts.FAMILY, 8))
+        self.feat_select_all_btn.setMaximumWidth(80)
+        self.feat_select_all_btn.clicked.connect(self._select_all_features)
+        feat_btn_layout.addWidget(self.feat_select_all_btn)
+
+        self.feat_deselect_all_btn = QPushButton("Deselect All")
+        self.feat_deselect_all_btn.setFont(QFont(Fonts.FAMILY, 8))
+        self.feat_deselect_all_btn.setMaximumWidth(80)
+        self.feat_deselect_all_btn.clicked.connect(self._deselect_all_features)
+        feat_btn_layout.addWidget(self.feat_deselect_all_btn)
+
+        self.feature_count_label = QLabel("No features loaded")
+        self.feature_count_label.setFont(QFont(Fonts.FAMILY, 8))
+        feat_btn_layout.addWidget(self.feature_count_label)
+        feat_btn_layout.addStretch()
+        feature_sel_layout.addLayout(feat_btn_layout)
+
+        # Scrollable checkbox area
+        self.feature_scroll_area = QScrollArea()
+        self.feature_scroll_area.setMaximumHeight(200)
+        self.feature_scroll_area.setWidgetResizable(True)
+        self.feature_checkbox_widget = QWidget()
+        self.feature_checkbox_layout = QVBoxLayout(self.feature_checkbox_widget)
+        self.feature_checkbox_layout.setContentsMargins(4, 4, 4, 4)
+        self.feature_checkbox_layout.setSpacing(2)
+        self.feature_scroll_area.setWidget(self.feature_checkbox_widget)
+        feature_sel_layout.addWidget(self.feature_scroll_area)
+
+        self.feature_checkboxes = {}
+
+        config_layout.addWidget(feature_sel_group)
 
         # Parameters file (optional)
         param_layout = QHBoxLayout()
         param_label = QLabel("Parameters:")
         param_label.setMinimumWidth(120)
-        param_label.setFont(QFont("Arial", 9))
+        param_label.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(param_label)
 
         self.training_param_edit = QLineEdit()
         self.training_param_edit.setPlaceholderText("Optional: Parameter configuration")
-        self.training_param_edit.setFont(QFont("Arial", 9))
+        self.training_param_edit.setFont(QFont(Fonts.FAMILY, 9))
         param_layout.addWidget(self.training_param_edit)
 
         browse_param_btn = QPushButton("Browse...")
@@ -417,23 +479,10 @@ class HTRAnalysisAppV3(QMainWindow):
         # Train button
         train_layout = QHBoxLayout()
 
-        self.train_model_btn = QPushButton("🧠 Train Model")
-        self.train_model_btn.setFont(QFont("Arial", 10, QFont.Bold))
-        self.train_model_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.train_model_btn = QPushButton("Train Model")
+        self.train_model_btn.setIcon(get_icon('computer'))
+        self.train_model_btn.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
+        self.train_model_btn.setStyleSheet(stylesheet_button_success())
         self.train_model_btn.clicked.connect(self.train_model)
         train_layout.addWidget(self.train_model_btn)
 
@@ -446,7 +495,7 @@ class HTRAnalysisAppV3(QMainWindow):
     def create_training_evaluate_section(self, parent_layout):
         """Training evaluation and iteration section."""
         eval_group = QGroupBox("Evaluate & Iterate")
-        eval_group.setFont(QFont("Arial", 10, QFont.Bold))
+        eval_group.setFont(QFont(Fonts.FAMILY, 10, QFont.Bold))
         eval_layout = QVBoxLayout(eval_group)
         eval_layout.setContentsMargins(10, 15, 10, 10)
         eval_layout.setSpacing(10)
@@ -456,34 +505,58 @@ class HTRAnalysisAppV3(QMainWindow):
             "<b>Review model performance:</b> "
             "Analyze misclassified events, fix labels, and retrain to improve accuracy."
         )
-        instructions.setFont(QFont("Arial", 9))
+        instructions.setFont(QFont(Fonts.FAMILY, 9))
         instructions.setWordWrap(True)
         eval_layout.addWidget(instructions)
 
         # Metrics display
         self.metrics_label = QLabel("Train a model to see performance metrics")
-        self.metrics_label.setFont(QFont("Arial", 9))
-        self.metrics_label.setStyleSheet(
-            "background-color: #f8f9fa; padding: 8px; border-radius: 4px; color: #6c757d;"
-        )
+        self.metrics_label.setFont(QFont(Fonts.FAMILY, 9))
+        self.metrics_label.setStyleSheet(stylesheet_status_info())
         eval_layout.addWidget(self.metrics_label)
 
         # Misclassified events section
         misclass_layout = QHBoxLayout()
 
         # Load misclassified button
-        self.load_misclass_btn = QPushButton("📊 Load Misclassified Events")
-        self.load_misclass_btn.setFont(QFont("Arial", 9))
+        self.load_misclass_btn = QPushButton("Load Misclassified Events")
+        self.load_misclass_btn.setIcon(get_icon('chart'))
+        self.load_misclass_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.load_misclass_btn.clicked.connect(self.load_misclassified_events)
         self.load_misclass_btn.setEnabled(False)
         misclass_layout.addWidget(self.load_misclass_btn)
 
         # View confusion matrix button
-        self.view_confusion_btn = QPushButton("📈 View Confusion Matrix")
-        self.view_confusion_btn.setFont(QFont("Arial", 9))
+        self.view_confusion_btn = QPushButton("View Confusion Matrix")
+        self.view_confusion_btn.setIcon(get_icon('chart'))
+        self.view_confusion_btn.setFont(QFont(Fonts.FAMILY, 9))
         self.view_confusion_btn.clicked.connect(self.view_confusion_matrix)
         self.view_confusion_btn.setEnabled(False)
         misclass_layout.addWidget(self.view_confusion_btn)
+
+        # View feature importance button
+        self.view_importance_btn = QPushButton("View Feature Importance")
+        self.view_importance_btn.setIcon(get_icon('chart'))
+        self.view_importance_btn.setFont(QFont(Fonts.FAMILY, 9))
+        self.view_importance_btn.clicked.connect(self.view_feature_importance)
+        self.view_importance_btn.setEnabled(False)
+        misclass_layout.addWidget(self.view_importance_btn)
+
+        # View threshold curve button
+        self.view_threshold_btn = QPushButton("View Threshold Curve")
+        self.view_threshold_btn.setIcon(get_icon('chart'))
+        self.view_threshold_btn.setFont(QFont(Fonts.FAMILY, 9))
+        self.view_threshold_btn.clicked.connect(self.view_threshold_curve)
+        self.view_threshold_btn.setEnabled(False)
+        misclass_layout.addWidget(self.view_threshold_btn)
+
+        # View SHAP analysis button
+        self.view_shap_btn = QPushButton("View SHAP Analysis")
+        self.view_shap_btn.setIcon(get_icon('search'))
+        self.view_shap_btn.setFont(QFont(Fonts.FAMILY, 9))
+        self.view_shap_btn.clicked.connect(self.view_shap_analysis)
+        self.view_shap_btn.setEnabled(False)
+        misclass_layout.addWidget(self.view_shap_btn)
 
         misclass_layout.addStretch()
 
@@ -492,9 +565,9 @@ class HTRAnalysisAppV3(QMainWindow):
         # Misclassified events table (compact)
         self.misclass_table = QTableWidget()
         self.misclass_table.setMaximumHeight(150)
-        self.misclass_table.setColumnCount(5)
+        self.misclass_table.setColumnCount(6)
         self.misclass_table.setHorizontalHeaderLabels([
-            "Error Type", "Start Frame", "End Frame", "File", "Notes"
+            "Error Type", "Start Frame", "End Frame", "Confidence", "File", "Notes"
         ])
         self.misclass_table.horizontalHeader().setStretchLastSection(True)
         self.misclass_table.setVisible(False)
@@ -517,16 +590,10 @@ class HTRAnalysisAppV3(QMainWindow):
         # Results text
         self.training_results_text = QTextEdit()
         self.training_results_text.setMaximumHeight(100)
-        self.training_results_text.setFont(QFont("Consolas", 8))
+        self.training_results_text.setFont(QFont(Fonts.MONO_FAMILY, 8))
         self.training_results_text.setReadOnly(True)
         self.training_results_text.setPlaceholderText("Training progress will appear here...")
-        self.training_results_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                color: #495057;
-            }
-        """)
+        self.training_results_text.setStyleSheet(stylesheet_log_area())
         progress_layout.addWidget(self.training_results_text)
 
         parent_layout.addWidget(progress_group)
@@ -537,15 +604,21 @@ class HTRAnalysisAppV3(QMainWindow):
             self.deploy_tab = DeployTab(parent=self, project_manager=self.project_manager)
             # Connect signals
             self.deploy_tab.processing_complete.connect(self.on_processing_complete)
-            self.tab_widget.addTab(self.deploy_tab, "Identify Headtwitches")
+            self.tab_widget.addTab(self.deploy_tab, "5. Identify Headtwitches")
         except Exception as e:
             # Fallback
             fallback_widget = QWidget()
             fallback_layout = QVBoxLayout(fallback_widget)
             fallback_layout.addWidget(QLabel(f"Identify Headtwitches Tab Error: {str(e)}"))
-            self.tab_widget.addTab(fallback_widget, "Identify Headtwitches")
+            self.tab_widget.addTab(fallback_widget, "5. Identify Headtwitches")
 
     # ==================== Tab Navigation ====================
+
+    def setup_keyboard_shortcuts(self):
+        """Set up Ctrl+1 through Ctrl+5 for tab navigation."""
+        for i in range(5):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{i+1}"), self)
+            shortcut.activated.connect(lambda idx=i: self.switch_to_tab(idx))
 
     def switch_to_tab(self, index):
         """Switch to specified tab index."""
@@ -830,18 +903,89 @@ class HTRAnalysisAppV3(QMainWindow):
 
     # ==================== Training Functions ====================
 
+    def _select_all_features(self):
+        """Check all feature checkboxes."""
+        for cb in self.feature_checkboxes.values():
+            cb.setChecked(True)
+        self._update_feature_count()
+
+    def _deselect_all_features(self):
+        """Uncheck all feature checkboxes."""
+        for cb in self.feature_checkboxes.values():
+            cb.setChecked(False)
+        self._update_feature_count()
+
+    def _update_feature_count(self):
+        """Update the feature count label."""
+        total = len(self.feature_checkboxes)
+        selected = sum(1 for cb in self.feature_checkboxes.values() if cb.isChecked())
+        self.feature_count_label.setText(f"Using {selected}/{total} features")
+
+    def _get_selected_feature_names(self):
+        """Return list of currently checked feature names."""
+        return [name for name, cb in self.feature_checkboxes.items() if cb.isChecked()]
+
+    def _populate_feature_checkboxes(self, training_csvs):
+        """Read feature column names from training CSVs and populate checkboxes."""
+        import pandas as pd
+
+        # Clear existing checkboxes
+        for cb in self.feature_checkboxes.values():
+            cb.setParent(None)
+        self.feature_checkboxes.clear()
+
+        metadata_cols = {
+            'ground_truth', 'rat_id', 'dose', 'drug', 'cohort', 'source_file',
+            'start_frame', 'end_frame', 'prediction', 'prediction_confidence'
+        }
+
+        # Collect feature columns from headers only (no full read)
+        all_feature_cols = []
+        for csv_path in training_csvs:
+            try:
+                header_df = pd.read_csv(csv_path, nrows=0)
+                cols = [c for c in header_df.columns if c not in metadata_cols]
+                for c in cols:
+                    if c not in all_feature_cols:
+                        all_feature_cols.append(c)
+            except Exception:
+                pass
+
+        if not all_feature_cols:
+            self.feature_count_label.setText("No features loaded")
+            return
+
+        # Get saved selection (None = use all)
+        saved_selection = None
+        if self.project_manager:
+            saved_selection = self.project_manager.get_selected_features()
+
+        # Create checkboxes
+        for col_name in all_feature_cols:
+            cb = QCheckBox(col_name)
+            cb.setFont(QFont(Fonts.FAMILY, 8))
+            if saved_selection is not None:
+                cb.setChecked(col_name in saved_selection)
+            else:
+                cb.setChecked(True)
+            cb.stateChanged.connect(lambda _: self._update_feature_count())
+            self.feature_checkbox_layout.addWidget(cb)
+            self.feature_checkboxes[col_name] = cb
+
+        self._update_feature_count()
+
     def refresh_training_status(self):
         """Scan training folder and display statistics with guidance."""
         if not self.project_manager:
             self.training_status_label.setText("⚠ No project loaded.")
-            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.training_status_label.setStyleSheet(stylesheet_status_warning())
             self.train_model_btn.setEnabled(False)
             return
 
         project_path, project_config = self.project_manager.get_current_project()
         if not project_path:
             self.training_status_label.setText("⚠ No project loaded.")
-            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.training_status_label.setStyleSheet(stylesheet_status_warning())
             self.train_model_btn.setEnabled(False)
             return
 
@@ -855,7 +999,7 @@ class HTRAnalysisAppV3(QMainWindow):
                 "⚠ <b>No training data found.</b><br>"
                 "Go to the <b>Prepare Data</b> tab and label some ground truth events first."
             )
-            self.training_status_label.setStyleSheet("background-color: #fff3cd; padding: 10px; border-radius: 4px;")
+            self.training_status_label.setStyleSheet(stylesheet_status_warning())
             self.train_model_btn.setEnabled(False)
             return
 
@@ -905,10 +1049,13 @@ class HTRAnalysisAppV3(QMainWindow):
             f"• <b>Class balance:</b> {class_balance:.1f}% positive"
             f"{guidance}"
         )
-        self.training_status_label.setStyleSheet(f"background-color: {status_color}; padding: 10px; border-radius: 4px;")
+        self.training_status_label.setStyleSheet(stylesheet_status_dynamic(status_color))
 
         # Enable train button if sufficient data
         self.train_model_btn.setEnabled(total_events >= 50)  # Absolute minimum
+
+        # Populate feature checkboxes from training CSV headers
+        self._populate_feature_checkboxes(training_csvs)
 
     def browse_training_params(self):
         """Browse for training parameters file."""
@@ -971,8 +1118,29 @@ class HTRAnalysisAppV3(QMainWindow):
 
             self.show_training_progress(f"Combined dataset: {len(combined_df)} labeled events")
 
-            # Save combined CSV temporarily
-            temp_combined_path = os.path.join(training_folder, "_combined_training_data.csv")
+            # Apply feature selection — keep only selected features + metadata
+            selected_features = self._get_selected_feature_names()
+            if selected_features and len(selected_features) < len(self.feature_checkboxes):
+                metadata_cols_set = {
+                    'ground_truth', 'rat_id', 'dose', 'drug', 'cohort', 'source_file',
+                    'start_frame', 'end_frame', 'prediction', 'prediction_confidence'
+                }
+                keep_cols = [c for c in combined_df.columns if c in metadata_cols_set or c in selected_features]
+                combined_df = combined_df[keep_cols]
+                self.show_training_progress(
+                    f"Using {len(selected_features)} of {len(self.feature_checkboxes)} features"
+                )
+            else:
+                self.show_training_progress(f"Using all {len(self.feature_checkboxes)} features")
+
+            # Create per-run subfolder: training/run_YYYY-MM-DD_HH-MM-SS/
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            run_folder = os.path.join(training_folder, f"run_{timestamp}")
+            os.makedirs(run_folder, exist_ok=True)
+            self.show_training_progress(f"Run folder: {os.path.basename(run_folder)}")
+
+            # Save combined CSV into the run folder
+            temp_combined_path = os.path.join(run_folder, "_combined_training_data.csv")
             combined_df.to_csv(temp_combined_path, index=False)
 
             # Load parameters
@@ -989,10 +1157,10 @@ class HTRAnalysisAppV3(QMainWindow):
             models_folder = os.path.join(project_path, "models")
             os.makedirs(models_folder, exist_ok=True)
 
-            # Create model filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Create model filename (use same timestamp as run folder)
+            ts_compact = datetime.now().strftime("%Y%m%d_%H%M%S")
             project_name = project_config.get("project_name", "HTR_Model")
-            model_file = os.path.join(models_folder, f"{project_name}_Model_{timestamp}.joblib")
+            model_file = os.path.join(models_folder, f"{project_name}_Model_{ts_compact}.joblib")
 
             self.show_training_progress("Starting training...")
 
@@ -1023,22 +1191,27 @@ class HTRAnalysisAppV3(QMainWindow):
             self.show_training_progress(f"Validation Accuracy: {accuracy:.3f}")
             self.show_training_progress(f"Precision: {precision:.3f} | Recall: {recall:.3f} | F1: {f1_score:.3f}")
 
-            # Generate confusion matrix and misclassified events
-            self._generate_training_analysis(temp_combined_path, model_file, project_path, training_details)
+            # Generate confusion matrix and misclassified events into run folder
+            self._generate_training_analysis(temp_combined_path, model_file, run_folder, training_details)
+
+            # Save feature selection to project config
+            if self.project_manager:
+                self.project_manager.save_selected_features(self._get_selected_feature_names())
 
             # Enable evaluation buttons
             self.load_misclass_btn.setEnabled(True)
             self.view_confusion_btn.setEnabled(True)
+            self.view_importance_btn.setEnabled(True)
+            self.view_threshold_btn.setEnabled(True)
+            self.view_shap_btn.setEnabled(True)
 
             # Update metrics display
             self.metrics_label.setText(
-                f"📊 Model Performance (Validation Set):\n"
+                f"Model Performance (Validation Set):\n"
                 f"Accuracy: {accuracy:.3f} | Precision: {precision:.3f} | Recall: {recall:.3f} | F1-Score: {f1_score:.3f}\n"
                 f"Review misclassified events to improve model."
             )
-            self.metrics_label.setStyleSheet(
-                "background-color: #d4edda; padding: 8px; border-radius: 4px; color: #155724;"
-            )
+            self.metrics_label.setStyleSheet(stylesheet_status_success())
 
             self.finish_training_progress("Model training", True)
 
@@ -1057,16 +1230,18 @@ class HTRAnalysisAppV3(QMainWindow):
             self.finish_training_progress("Model training", False)
             QMessageBox.critical(self, "Error", f"Model training failed:\n{str(e)}")
 
-    def _generate_training_analysis(self, csv_path, model_path, project_path, training_details):
-        """Generate confusion matrix and misclassified events analysis."""
+    def _generate_training_analysis(self, csv_path, model_path, run_folder, training_details):
+        """Generate confusion matrix and misclassified events analysis into a run folder."""
         try:
             import pandas as pd
+            import numpy as np
+            import matplotlib.pyplot as plt
             from core.ml_models import HTRClassifier, ModelEvaluator
             from sklearn.model_selection import train_test_split
 
-            # Create analysis and plots folders
-            analysis_folder = os.path.join(project_path, "analysis")
-            plots_folder = os.path.join(project_path, "plots")
+            # Create analysis and plots folders inside the run folder
+            analysis_folder = os.path.join(run_folder, "analysis")
+            plots_folder = os.path.join(run_folder, "plots")
             os.makedirs(analysis_folder, exist_ok=True)
             os.makedirs(plots_folder, exist_ok=True)
 
@@ -1079,6 +1254,12 @@ class HTRAnalysisAppV3(QMainWindow):
                 'start_frame', 'end_frame', 'prediction', 'prediction_confidence'
             ]
             feature_cols = [col for col in df.columns if col not in metadata_cols]
+
+            # Apply feature selection to match training
+            selected_features = self._get_selected_feature_names()
+            if selected_features and len(selected_features) < len(self.feature_checkboxes):
+                feature_cols = [c for c in feature_cols if c in selected_features]
+
             X = df[feature_cols]
             y = df['ground_truth']
 
@@ -1089,13 +1270,166 @@ class HTRAnalysisAppV3(QMainWindow):
             # Load model and predict
             classifier = HTRClassifier()
             classifier.load_model(model_path)
-            predictions, _ = classifier.predict(X_val)
+            predictions, probabilities = classifier.predict(X_val)
 
             # Generate confusion matrix plot
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             cm_plot_path = os.path.join(plots_folder, f"confusion_matrix_{timestamp}.png")
             ModelEvaluator.plot_confusion_matrix(y_val.values, predictions, cm_plot_path)
             self.show_training_progress(f"Confusion matrix saved: {os.path.basename(cm_plot_path)}")
+
+            # Generate feature importance plot
+            try:
+                importance_df = classifier.get_feature_importance()
+                fi_plot_path = os.path.join(plots_folder, f"feature_importance_{timestamp}.png")
+                fig_fi = ModelEvaluator.plot_feature_importance(importance_df, save_path=fi_plot_path)
+                plt.close(fig_fi)
+                self.show_training_progress(f"Feature importance saved: {os.path.basename(fi_plot_path)}")
+            except Exception as e:
+                self.show_training_progress(f"⚠ Could not generate feature importance plot: {e}")
+
+            # Generate SHAP summary plot
+            shap_values_for_log = None
+            try:
+                shap_plot_path = os.path.join(plots_folder, f"shap_summary_{timestamp}.png")
+                fig_shap, shap_vals = ModelEvaluator.plot_shap_summary(
+                    classifier.model, X_val, save_path=shap_plot_path
+                )
+                # Compute mean |SHAP| per feature for the training log
+                mean_abs_shap = np.abs(shap_vals.values).mean(axis=0)
+                shap_values_for_log = sorted(
+                    zip(X_val.columns, mean_abs_shap), key=lambda x: x[1], reverse=True
+                )
+                # Save raw per-sample SHAP values so the beeswarm can be recreated
+                shap_csv_path = os.path.join(analysis_folder, f"shap_values_{timestamp}.csv")
+                shap_df = pd.DataFrame(shap_vals.values, columns=X_val.columns)
+                shap_df.insert(0, 'sample_index', X_val.index)
+                shap_df.to_csv(shap_csv_path, index=False)
+                plt.close(fig_shap)
+                self.show_training_progress(f"SHAP summary saved: {os.path.basename(shap_plot_path)}")
+            except ImportError:
+                self.show_training_progress("SHAP analysis skipped (shap package not installed)")
+            except Exception as e:
+                self.show_training_progress(f"⚠ Could not generate SHAP analysis: {e}")
+
+            # Generate threshold curve
+            optimal_threshold = None
+            try:
+                fig_tc = ModelEvaluator.plot_threshold_curve(
+                    y_val.values, probabilities[:, 1],
+                    save_path=os.path.join(plots_folder, f"threshold_curve_{timestamp}.png")
+                )
+                # Extract optimal threshold from the plot for the training log
+                from sklearn.metrics import precision_recall_curve as prc
+                prec, rec, thresholds = prc(y_val.values, probabilities[:, 1])
+                f1_arr = np.where((prec[:-1] + rec[:-1]) > 0,
+                                  2 * (prec[:-1] * rec[:-1]) / (prec[:-1] + rec[:-1]), 0.0)
+                optimal_threshold = float(thresholds[np.argmax(f1_arr)])
+                # Save raw threshold curve data so it can be recreated in other programs
+                tc_csv_path = os.path.join(analysis_folder, f"threshold_curve_data_{timestamp}.csv")
+                pd.DataFrame({
+                    'threshold': thresholds,
+                    'precision': prec[:-1],
+                    'recall': rec[:-1],
+                    'f1': f1_arr,
+                }).to_csv(tc_csv_path, index=False)
+                plt.close(fig_tc)
+                self.show_training_progress(f"Threshold curve saved (optimal threshold: {optimal_threshold:.3f})")
+            except Exception as e:
+                self.show_training_progress(f"⚠ Could not generate threshold curve: {e}")
+
+            # Generate training log text file
+            try:
+                log_path = os.path.join(analysis_folder, f"training_log_{timestamp}.txt")
+                with open(log_path, 'w') as f:
+                    f.write("=" * 70 + "\n")
+                    f.write(f"  HTR Model Training Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("=" * 70 + "\n\n")
+
+                    f.write(f"Model Path: {model_path}\n\n")
+
+                    # Best hyperparameters
+                    best_params = training_details.get('best_params', {})
+                    if best_params:
+                        f.write("--- Best Hyperparameters ---\n")
+                        for k, v in best_params.items():
+                            f.write(f"  {k}: {v}\n")
+                        f.write("\n")
+
+                    # Classification report
+                    val_results = training_details.get('validation_results', {})
+                    report = val_results.get('classification_report', {})
+                    if report:
+                        f.write("--- Classification Report (20% held-out validation set) ---\n")
+                        # Header
+                        f.write(f"{'':>18} {'precision':>10} {'recall':>10} {'f1-score':>10} {'support':>10}\n\n")
+                        for label, metrics in report.items():
+                            if isinstance(metrics, dict):
+                                f.write(f"{label:>18} {metrics.get('precision', 0):>10.4f} "
+                                        f"{metrics.get('recall', 0):>10.4f} "
+                                        f"{metrics.get('f1-score', 0):>10.4f} "
+                                        f"{metrics.get('support', 0):>10.0f}\n")
+                            else:
+                                f.write(f"{'accuracy':>18} {'':>10} {'':>10} {metrics:>10.4f}\n")
+                        f.write("\n")
+
+                    # Confusion matrix
+                    cm = val_results.get('confusion_matrix', None)
+                    if cm:
+                        f.write("--- Confusion Matrix (20% held-out validation set) ---\n")
+                        f.write("  (rows = actual, cols = predicted; 0 = no HTR, 1 = HTR)\n")
+                        for row in cm:
+                            f.write("  " + "  ".join(f"{v:>6}" for v in row) + "\n")
+                        f.write("\n")
+
+                    # All feature importances
+                    try:
+                        imp_df = classifier.get_feature_importance()
+                        f.write("--- All Feature Importances (XGBoost gain, normalized to sum=1) ---\n")
+                        f.write("  Gain = average reduction in loss from splits using each feature.\n")
+                        f.write("  Values are normalized so all features sum to 1.\n\n")
+                        for _, row in imp_df.iterrows():
+                            f.write(f"  {row['feature']:<40} {row['importance']:.6f}\n")
+                        f.write("\n")
+                    except Exception:
+                        pass
+
+                    # SHAP feature importances
+                    if shap_values_for_log:
+                        f.write("--- SHAP Feature Importances (mean |SHAP|, TreeSHAP, log-odds) ---\n")
+                        f.write("  TreeSHAP: exact Shapley values computed via shap.TreeExplainer.\n")
+                        f.write("  Values are in log-odds units (raw XGBoost output before sigmoid).\n")
+                        f.write("  Mean |SHAP| = average absolute contribution across validation samples.\n\n")
+                        for feat_name, shap_val in shap_values_for_log:
+                            f.write(f"  {feat_name:<40} {shap_val:.6f}\n")
+                        f.write("\n")
+
+                    # Optimal threshold
+                    if optimal_threshold is not None:
+                        f.write(f"--- Optimal Classification Threshold ---\n")
+                        f.write(f"  Applied to predicted probability of HTR (positive class).\n")
+                        f.write(f"  Selected as the threshold maximizing F1 score on the validation set.\n\n")
+                        f.write(f"  {optimal_threshold:.4f}\n\n")
+
+                    # Saved output files
+                    f.write("--- Saved Output Files ---\n")
+                    f.write(f"  training_log_*.txt          This file.\n")
+                    f.write(f"  confusion_matrix_*.png      Confusion matrix plot (validation set).\n")
+                    f.write(f"  feature_importance_*.png    XGBoost gain feature importance bar chart.\n")
+                    f.write(f"  shap_summary_*.png          SHAP beeswarm plot (TreeSHAP, log-odds).\n")
+                    f.write(f"  threshold_curve_*.png       Precision/Recall/F1 vs. threshold plot.\n")
+                    f.write(f"  shap_values_*.csv           Per-sample TreeSHAP values (log-odds);\n")
+                    f.write(f"                              columns = features + sample_index.\n")
+                    f.write(f"  threshold_curve_data_*.csv  threshold, precision, recall, f1 arrays\n")
+                    f.write(f"                              used to draw the threshold curve plot.\n")
+                    f.write(f"  misclassified_events_*.csv  Validation samples predicted incorrectly,\n")
+                    f.write(f"                              with predicted_label and error_type columns.\n")
+                    f.write("\n")
+
+                    f.write("=" * 70 + "\n")
+                self.show_training_progress(f"Training log saved: {os.path.basename(log_path)}")
+            except Exception as e:
+                self.show_training_progress(f"⚠ Could not generate training log: {e}")
 
             # Find misclassified events
             misclassified_mask = y_val.values != predictions
@@ -1120,17 +1454,31 @@ class HTRAnalysisAppV3(QMainWindow):
         except Exception as e:
             self.show_training_progress(f"⚠ Warning: Could not generate analysis outputs: {str(e)}")
 
-    def load_misclassified_events(self):
-        """Load and display misclassified events CSV."""
+    def _get_latest_run_folder(self):
+        """Find the most recent run_* subfolder inside training/."""
         if not self.project_manager:
-            return
-
+            return None
         project_path, _ = self.project_manager.get_current_project()
         if not project_path:
+            return None
+        training_folder = os.path.join(project_path, "training")
+        run_dirs = glob.glob(os.path.join(training_folder, "run_*"))
+        if not run_dirs:
+            return None
+        return max(run_dirs, key=os.path.getmtime)
+
+    def load_misclassified_events(self):
+        """Load and display misclassified events CSV."""
+        run_folder = self._get_latest_run_folder()
+        if not run_folder:
+            QMessageBox.information(
+                self,
+                "No Analysis Files",
+                "No training run found. Train a model first to generate misclassified events."
+            )
             return
 
-        # Look for misclassified events CSV in analysis folder
-        analysis_folder = os.path.join(project_path, "analysis")
+        analysis_folder = os.path.join(run_folder, "analysis")
         if not os.path.exists(analysis_folder):
             QMessageBox.information(
                 self,
@@ -1179,15 +1527,22 @@ class HTRAnalysisAppV3(QMainWindow):
                 self.misclass_table.setItem(i, 1, QTableWidgetItem(str(int(row.get('start_frame', 0)))))
                 self.misclass_table.setItem(i, 2, QTableWidgetItem(str(int(row.get('end_frame', 0)))))
 
+                # Confidence (prediction probability)
+                confidence = row.get('prediction_confidence', '')
+                if confidence != '' and not pd.isna(confidence):
+                    self.misclass_table.setItem(i, 3, QTableWidgetItem(f"{float(confidence):.3f}"))
+                else:
+                    self.misclass_table.setItem(i, 3, QTableWidgetItem("N/A"))
+
                 # File/rat info
                 file_info = row.get('rat_id', row.get('file', row.get('predicted_label', '')))
-                self.misclass_table.setItem(i, 3, QTableWidgetItem(str(file_info)))
+                self.misclass_table.setItem(i, 4, QTableWidgetItem(str(file_info)))
 
                 # Notes (ground truth vs predicted)
                 gt = row.get('ground_truth', '')
                 pred = row.get('predicted_label', '')
                 notes = f"GT: {gt}, Pred: {pred}"
-                self.misclass_table.setItem(i, 4, QTableWidgetItem(notes))
+                self.misclass_table.setItem(i, 5, QTableWidgetItem(notes))
 
             # Resize columns
             self.misclass_table.resizeColumnsToContents()
@@ -1200,56 +1555,63 @@ class HTRAnalysisAppV3(QMainWindow):
 
     def view_confusion_matrix(self):
         """View confusion matrix plot."""
-        if not self.project_manager:
+        self._view_plot("confusion_matrix_*.png", "Confusion Matrix")
+
+    def view_feature_importance(self):
+        """View feature importance plot."""
+        self._view_plot("feature_importance_*.png", "Feature Importance")
+
+    def view_threshold_curve(self):
+        """View threshold curve plot."""
+        self._view_plot("threshold_curve_*.png", "Threshold Curve")
+
+    def view_shap_analysis(self):
+        """View SHAP summary plot."""
+        self._view_plot("shap_summary_*.png", "SHAP Analysis")
+
+    def _view_plot(self, pattern, title):
+        """Generic plot viewer — finds the most recent file matching pattern and shows it in a scrollable dialog."""
+        run_folder = self._get_latest_run_folder()
+        if not run_folder:
+            QMessageBox.information(self, "No Plots", "No training run found. Train a model first.")
             return
 
-        project_path, _ = self.project_manager.get_current_project()
-        if not project_path:
-            return
-
-        # Look for confusion matrix plot in plots folder
-        plots_folder = os.path.join(project_path, "plots")
+        plots_folder = os.path.join(run_folder, "plots")
         if not os.path.exists(plots_folder):
-            QMessageBox.information(
-                self,
-                "No Plots",
-                "No plots folder found. Train a model first."
-            )
+            QMessageBox.information(self, "No Plots", "No plots folder found. Train a model first.")
             return
 
-        confusion_files = glob.glob(os.path.join(plots_folder, "confusion_matrix_*.png"))
-        if not confusion_files:
-            QMessageBox.information(
-                self,
-                "No Confusion Matrix",
-                "No confusion matrix plot found."
-            )
+        matching = glob.glob(os.path.join(plots_folder, pattern))
+        if not matching:
+            QMessageBox.information(self, f"No {title}", f"No {title.lower()} plot found.")
             return
 
-        # Use most recent file
-        latest_plot = max(confusion_files, key=os.path.getmtime)
+        latest_plot = max(matching, key=os.path.getmtime)
 
         try:
-            # Create image viewer dialog
             dialog = QDialog(self)
-            dialog.setWindowTitle(f"Confusion Matrix - {os.path.basename(latest_plot)}")
+            dialog.setWindowTitle(f"{title} - {os.path.basename(latest_plot)}")
             dialog.setMinimumSize(800, 600)
 
             layout = QVBoxLayout(dialog)
 
-            # Load and display image
             pixmap = QPixmap(latest_plot)
             if pixmap.isNull():
                 QMessageBox.warning(self, "Error", f"Could not load image:\n{latest_plot}")
                 return
 
-            # Create label for image
-            image_label = QLabel()
-            image_label.setPixmap(pixmap.scaled(780, 550, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            image_label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(image_label)
+            # Scale to fixed width, keep aspect ratio (may be very tall)
+            scaled_pixmap = pixmap.scaledToWidth(780, Qt.SmoothTransformation)
 
-            # Add close button
+            image_label = QLabel()
+            image_label.setPixmap(scaled_pixmap)
+            image_label.setAlignment(Qt.AlignCenter)
+
+            scroll_area = QScrollArea()
+            scroll_area.setWidget(image_label)
+            scroll_area.setWidgetResizable(False)
+            layout.addWidget(scroll_area)
+
             close_btn = QPushButton("Close")
             close_btn.clicked.connect(dialog.accept)
             close_btn.setMaximumWidth(100)
@@ -1263,7 +1625,7 @@ class HTRAnalysisAppV3(QMainWindow):
             dialog.exec()
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to display confusion matrix:\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to display {title.lower()}:\n{str(e)}")
 
     def start_training_progress(self, operation_name):
         """Start training progress tracking."""
@@ -1291,8 +1653,10 @@ class HTRAnalysisAppV3(QMainWindow):
 
 def main():
     """Application entry point."""
+    from .theme import get_app_stylesheet
     app = QApplication(sys.argv)
     app.setApplicationName("HTR Analysis Tool v3")
+    app.setStyleSheet(get_app_stylesheet())
 
     window = HTRAnalysisAppV3()
     window.show()

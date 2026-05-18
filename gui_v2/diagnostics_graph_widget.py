@@ -10,6 +10,7 @@ import numpy as np
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QSizePolicy
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
+from .theme import Fonts
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -108,7 +109,7 @@ class DiagnosticsGraphWidget(QWidget):
         controls_layout.setContentsMargins(5, 2, 5, 2)
 
         self.show_peaks_checkbox = QCheckBox("Show Peaks/Valleys")
-        self.show_peaks_checkbox.setFont(QFont("Arial", 8))
+        self.show_peaks_checkbox.setFont(QFont(Fonts.FAMILY, 8))
         self.show_peaks_checkbox.setToolTip(
             "Show detected peaks and valleys on signal lines.\n"
             "Filled circles = peaks, hollow circles = valleys.\n"
@@ -122,7 +123,7 @@ class DiagnosticsGraphWidget(QWidget):
         controls_layout.addWidget(self.show_peaks_checkbox)
 
         self.show_cycles_checkbox = QCheckBox("Show Cycle Lines")
-        self.show_cycles_checkbox.setFont(QFont("Arial", 8))
+        self.show_cycles_checkbox.setFont(QFont(Fonts.FAMILY, 8))
         self.show_cycles_checkbox.setToolTip(
             "Draw connector lines between peak-valley pairs (cycles).\n"
             "Green line = cycle amplitude passes Amp Thresh\n"
@@ -134,7 +135,7 @@ class DiagnosticsGraphWidget(QWidget):
         controls_layout.addWidget(self.show_cycles_checkbox)
 
         self.show_osc_numbers_checkbox = QCheckBox("Show Osc #")
-        self.show_osc_numbers_checkbox.setFont(QFont("Arial", 8))
+        self.show_osc_numbers_checkbox.setFont(QFont(Fonts.FAMILY, 8))
         self.show_osc_numbers_checkbox.setToolTip(
             "Show oscillation numbers within groups.\n"
             "Each cycle in a group is numbered (1, 2, 3...).\n"
@@ -290,7 +291,10 @@ class DiagnosticsGraphWidget(QWidget):
         """
         # Remove old event spans
         for span in self.event_spans:
-            span.remove()
+            try:
+                span.remove()
+            except ValueError:
+                pass  # Artist already removed
         self.event_spans.clear()
 
         if events_df is None or len(events_df) == 0:
@@ -326,7 +330,10 @@ class DiagnosticsGraphWidget(QWidget):
     def clear_events(self):
         """Remove all event overlays."""
         for span in self.event_spans:
-            span.remove()
+            try:
+                span.remove()
+            except ValueError:
+                pass  # Artist already removed
         self.event_spans.clear()
         self.canvas.draw()
 
@@ -871,34 +878,19 @@ class DiagnosticsGraphWidget(QWidget):
 
     def _remove_peak_scatters(self):
         """Remove existing peak and valley scatter plot objects."""
-        # Left ear
-        if self.left_ear_peaks_scatter is not None:
-            self.left_ear_peaks_scatter.remove()
-            self.left_ear_peaks_scatter = None
-        if self.left_ear_valleys_scatter is not None:
-            self.left_ear_valleys_scatter.remove()
-            self.left_ear_valleys_scatter = None
-        # Right ear
-        if self.right_ear_peaks_scatter is not None:
-            self.right_ear_peaks_scatter.remove()
-            self.right_ear_peaks_scatter = None
-        if self.right_ear_valleys_scatter is not None:
-            self.right_ear_valleys_scatter.remove()
-            self.right_ear_valleys_scatter = None
-        # Head (passing)
-        if self.head_peaks_scatter is not None:
-            self.head_peaks_scatter.remove()
-            self.head_peaks_scatter = None
-        if self.head_valleys_scatter is not None:
-            self.head_valleys_scatter.remove()
-            self.head_valleys_scatter = None
-        # Head (failing)
-        if self.head_peaks_failing_scatter is not None:
-            self.head_peaks_failing_scatter.remove()
-            self.head_peaks_failing_scatter = None
-        if self.head_valleys_failing_scatter is not None:
-            self.head_valleys_failing_scatter.remove()
-            self.head_valleys_failing_scatter = None
+        for attr in (
+            'left_ear_peaks_scatter', 'left_ear_valleys_scatter',
+            'right_ear_peaks_scatter', 'right_ear_valleys_scatter',
+            'head_peaks_scatter', 'head_valleys_scatter',
+            'head_peaks_failing_scatter', 'head_valleys_failing_scatter',
+        ):
+            obj = getattr(self, attr, None)
+            if obj is not None:
+                try:
+                    obj.remove()
+                except ValueError:
+                    pass  # Artist already removed
+                setattr(self, attr, None)
 
     # ==================== Cycle Line Methods ====================
 

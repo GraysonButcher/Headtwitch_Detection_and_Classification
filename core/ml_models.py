@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional, Union
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_curve
 from xgboost import XGBClassifier
 import glob
 
@@ -24,6 +24,7 @@ class HTRClassifier:
         self.model_type = model_type
         self.model = None
         self.feature_names = None
+        self.optimal_threshold = 0.5  # Default; overwritten during training
         self.training_history = {}
         
     def train(self, X: pd.DataFrame, y: pd.Series, validation_split: float = 0.2,
@@ -54,7 +55,22 @@ class HTRClassifier:
         
         # Evaluate on validation set
         val_results = self.evaluate(X_val, y_val)
-        
+
+        # Compute optimal classification threshold (max F1) on validation set
+        _, val_probs = self.predict(X_val)
+        val_probs_pos = val_probs[:, 1] if val_probs.shape[1] > 1 else val_probs[:, 0]
+        precision, recall, thresholds = precision_recall_curve(y_val, val_probs_pos)
+        precision = precision[:-1]
+        recall = recall[:-1]
+        f1 = np.where(
+            (precision + recall) > 0,
+            2 * (precision * recall) / (precision + recall),
+            0.0
+        )
+        optimal_idx = np.argmax(f1)
+        self.optimal_threshold = float(thresholds[optimal_idx])
+        print(f"Optimal classification threshold: {self.optimal_threshold:.3f} (F1={f1[optimal_idx]:.3f})")
+
         # Store training history
         self.training_history = {
             'training_samples': len(X_train),
@@ -62,6 +78,7 @@ class HTRClassifier:
             'feature_count': len(self.feature_names),
             'best_params': best_params,
             'validation_results': val_results,
+            'optimal_threshold': self.optimal_threshold,
             'training_date': datetime.now().isoformat()
         }
         
@@ -77,9 +94,9 @@ class HTRClassifier:
             
             base_model = XGBClassifier(
                 random_state=random_state,
-                use_label_encoder=False,
                 eval_metric='logloss',
-                scale_pos_weight=scale_pos_weight
+                scale_pos_weight=scale_pos_weight,
+                importance_type='gain'
             )
             
             param_grid = {
@@ -122,9 +139,9 @@ class HTRClassifier:
             scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
             model = XGBClassifier(
                 random_state=random_state,
-                use_label_encoder=False,
                 eval_metric='logloss',
-                scale_pos_weight=scale_pos_weight
+                scale_pos_weight=scale_pos_weight,
+                importance_type='gain'
             )
         else:
             model = RandomForestClassifier(random_state=random_state)
@@ -172,9 +189,10 @@ class HTRClassifier:
             X_filtered = X[feature_cols]
             print(f"  Using {len(feature_cols)} columns (excluded metadata columns)")
         
-        predictions = self.model.predict(X_filtered)
         probabilities = self.model.predict_proba(X_filtered)
-        
+        prob_positive = probabilities[:, 1] if probabilities.shape[1] > 1 else probabilities[:, 0]
+        predictions = (prob_positive >= self.optimal_threshold).astype(int)
+
         return predictions, probabilities
     
     def evaluate(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, Any]:
@@ -228,6 +246,7 @@ class HTRClassifier:
                 'model': self.model,
                 'model_type': self.model_type,
                 'feature_names': self.feature_names,
+                'optimal_threshold': self.optimal_threshold,
                 'training_history': self.training_history
             }
             joblib.dump(model_data, filepath)
@@ -247,16 +266,18 @@ class HTRClassifier:
                 self.model = model_data['model']
                 self.model_type = model_data.get('model_type', 'unknown')
                 self.feature_names = model_data.get('feature_names', None)
+                self.optimal_threshold = model_data.get('optimal_threshold', 0.5)
                 self.training_history = model_data.get('training_history', {})
             else:
                 # Legacy format: raw model object
                 self.model = model_data
                 self.model_type = 'unknown'
                 self.feature_names = None
+                self.optimal_threshold = 0.5
                 self.training_history = {}
                 print("Loaded legacy model format - some metadata may be missing")
-            
-            print(f"Model loaded successfully: type={self.model_type}")
+
+            print(f"Model loaded successfully: type={self.model_type}, threshold={self.optimal_threshold:.3f}")
             return True
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -351,21 +372,30 @@ class BatchPredictor:
         return results
     
     def _parse_filename(self, filepath: str) -> Dict[str, str]:
-        """Parse metadata from filename."""
+        """Parse metadata from filename.
+
+        Expects filenames like: Cohort_1_DOI_1mgkg_6011f_htr_features.csv
+        Rat ID is the last underscore-separated segment that looks like 3+ digits
+        optionally followed by a single letter (e.g., 6011f, 6010, 1001a).
+        """
         import re
 
         filename = os.path.basename(filepath)
 
         try:
             # Remove common file extensions and suffixes
-            base_name = filename.replace('.csv', '').replace('.h5', '').replace('_htr_features', '').replace('_predicted', '')
+            base_name = filename.replace('.csv', '').replace('.h5', '')
+            for suffix in ['_htr_features_predicted', '_predictions', '_htr_features', '_predicted']:
+                base_name = base_name.replace(suffix, '')
 
-            # Extract rat ID as the first sequence of digits in the filename
-            rat_id_match = re.search(r'(\d+)', base_name)
-            if rat_id_match:
-                rat_id = rat_id_match.group(1)
-            else:
-                rat_id = 'unknown'
+            # Split by underscores, search from end for rat ID pattern
+            # Rat IDs: 3+ digits optionally followed by a single letter (e.g., 6011f)
+            parts = base_name.split('_')
+            rat_id = 'unknown'
+            for part in reversed(parts):
+                if re.match(r'^\d{3,}[a-zA-Z]?$', part):
+                    rat_id = part
+                    break
 
             # Don't try to parse dose - just set to unknown
             dose = 'unknown'
@@ -575,23 +605,112 @@ class ModelEvaluator:
         return fig
     
     @staticmethod
-    def plot_feature_importance(importance_df: pd.DataFrame, top_n: int = 20,
+    def plot_feature_importance(importance_df: pd.DataFrame, top_n: int = None,
                               save_path: Optional[str] = None) -> plt.Figure:
         """Create and optionally save feature importance plot."""
-        top_features = importance_df.head(top_n)
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        sns.barplot(data=top_features, x='importance', y='feature', palette='viridis', ax=ax)
-        ax.set_title(f'Top {top_n} Feature Importances')
+        if top_n is not None:
+            display_df = importance_df.head(top_n)
+            title = f'Top {top_n} Feature Importances'
+        else:
+            display_df = importance_df
+            title = 'All Feature Importances'
+
+        fig_height = max(8, len(display_df) * 0.35)
+        fig, ax = plt.subplots(figsize=(12, fig_height))
+        sns.barplot(data=display_df, x='importance', y='feature', palette='viridis', ax=ax)
+        ax.set_title(title)
         ax.set_xlabel('Importance Score')
         ax.set_ylabel('Feature')
-        
+
         plt.tight_layout()
-        
+
         if save_path:
             fig.savefig(save_path, dpi=150, bbox_inches='tight')
-        
+
         return fig
+
+    @staticmethod
+    def plot_threshold_curve(y_true: np.ndarray, probabilities: np.ndarray,
+                            save_path: Optional[str] = None) -> plt.Figure:
+        """Create precision-recall-F1 vs. classification threshold plot.
+
+        Args:
+            y_true: True binary labels
+            probabilities: Predicted probabilities for the positive class
+            save_path: Optional path to save the figure
+
+        Returns:
+            matplotlib Figure
+        """
+        precision, recall, thresholds = precision_recall_curve(y_true, probabilities)
+
+        # precision_recall_curve returns arrays where precision/recall have one
+        # extra element; trim to match thresholds length
+        precision = precision[:-1]
+        recall = recall[:-1]
+
+        # Compute F1 at each threshold
+        f1 = np.where(
+            (precision + recall) > 0,
+            2 * (precision * recall) / (precision + recall),
+            0.0
+        )
+
+        # Find optimal threshold (max F1)
+        optimal_idx = np.argmax(f1)
+        optimal_threshold = thresholds[optimal_idx]
+        optimal_f1 = f1[optimal_idx]
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(thresholds, precision, label='Precision', linewidth=2)
+        ax.plot(thresholds, recall, label='Recall', linewidth=2)
+        ax.plot(thresholds, f1, label='F1 Score', linewidth=2)
+
+        # Mark optimal threshold
+        ax.axvline(x=optimal_threshold, color='gray', linestyle='--', linewidth=1,
+                   label=f'Optimal Threshold = {optimal_threshold:.3f} (F1={optimal_f1:.3f})')
+        ax.scatter([optimal_threshold], [optimal_f1], color='red', s=80, zorder=5)
+
+        ax.set_xlabel('Classification Threshold')
+        ax.set_ylabel('Score')
+        ax.set_title('Precision, Recall & F1 vs. Classification Threshold')
+        ax.legend(loc='best')
+        ax.set_xlim([0, 1])
+        ax.set_ylim([0, 1.05])
+        ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+
+        return fig
+
+    @staticmethod
+    def plot_shap_summary(model, X: pd.DataFrame,
+                          save_path: Optional[str] = None) -> Tuple['plt.Figure', Any]:
+        """Create SHAP beeswarm summary plot.
+
+        Uses TreeExplainer for native XGBoost support.
+        Returns (figure, shap_values) so callers can reuse the values.
+        Raises ImportError if shap is not installed.
+        """
+        import shap  # let ImportError propagate so callers can handle it
+
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer(X)
+
+        fig_height = max(8, X.shape[1] * 0.35)
+        fig, ax = plt.subplots(figsize=(12, fig_height))
+        shap.plots.beeswarm(shap_values, show=False)
+
+        # beeswarm draws on the current axes; grab the figure it used
+        fig = plt.gcf()
+
+        if save_path:
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+
+        return fig, shap_values
 
 
 class HTRPredictor:
