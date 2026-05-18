@@ -113,7 +113,6 @@ class ParameterPanel(QWidget):
     def create_analysis_controls(self, parent_layout):
         """Create analysis control section with reanalysis buttons."""
         analysis_group = QGroupBox("Detection Analysis")
-        analysis_group.setMaximumHeight(75)
         analysis_layout = QVBoxLayout(analysis_group)
         analysis_layout.setContentsMargins(8, 8, 8, 8)
         analysis_layout.setSpacing(4)

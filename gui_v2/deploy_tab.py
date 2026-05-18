@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QPushButton, QLineEdit, QProgressBar, QTextEdit, QMessageBox,
     QFileDialog, QRadioButton, QButtonGroup, QDialog, QTableWidget,
-    QTableWidgetItem, QHeaderView, QComboBox
+    QTableWidgetItem, QHeaderView, QComboBox, QScrollArea
 )
 from PySide6.QtCore import Qt, QDateTime, Signal
 from PySide6.QtGui import QFont
@@ -50,7 +50,16 @@ class DeployTab(QWidget):
 
     def init_ui(self):
         """Initialize the user interface."""
-        layout = QVBoxLayout(self)
+        # Outer layout holds the scroll area
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(12)
 
@@ -80,6 +89,9 @@ class DeployTab(QWidget):
 
         # Final stretch
         layout.addStretch()
+
+        scroll_area.setWidget(scroll_content)
+        outer_layout.addWidget(scroll_area)
 
     def create_instructions_section(self, parent_layout):
         """Instructions header."""
@@ -1293,6 +1305,12 @@ class DeployTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
+        combine_btn = QPushButton("Combine All Files")
+        combine_btn.setIcon(get_icon('combine'))
+        combine_btn.setToolTip("Merge all prediction CSVs into a single file with corrected Rat IDs")
+        combine_btn.clicked.connect(lambda: self.combine_all_predictions(summary_data))
+        button_layout.addWidget(combine_btn)
+
         export_csv_btn = QPushButton("Export to CSV")
         export_csv_btn.setIcon(get_icon('save'))
         export_csv_btn.clicked.connect(lambda: self.export_results_to_csv(summary_data))
@@ -1434,6 +1452,109 @@ class DeployTab(QWidget):
                 self,
                 "Export Failed",
                 f"Could not export HTR summary:\n{str(e)}"
+            )
+
+    def _repair_rat_id(self, filename: str) -> str:
+        """Re-parse rat ID from a prediction filename.
+
+        Looks for the last underscore-separated segment that is 3+ digits
+        optionally followed by a single letter (e.g., 6011f, 6010, 1001a).
+        """
+        import re
+
+        # Strip suffixes to get back to the original naming parts
+        base = filename
+        for suffix in ['.csv', '.h5', '_htr_features_predicted', '_predictions',
+                       '_htr_features', '_predicted']:
+            base = base.replace(suffix, '')
+
+        parts = base.split('_')
+        for part in reversed(parts):
+            if re.match(r'^\d{3,}[a-zA-Z]?$', part):
+                return part
+        return 'unknown'
+
+    def combine_all_predictions(self, summary_data):
+        """Combine all prediction CSVs into a single file with corrected Rat IDs."""
+        if not self.project_manager:
+            return
+
+        project_path, project_config = self.project_manager.get_current_project()
+        if not project_path:
+            QMessageBox.warning(self, "Error", "No project loaded.")
+            return
+
+        try:
+            frames = []
+
+            for data in summary_data:
+                pred_file = data['pred_file']
+                try:
+                    df = pd.read_csv(pred_file)
+
+                    # Add source filename column
+                    df['source_file'] = data['file']
+
+                    # Repair rat_id from the filename
+                    corrected_id = self._repair_rat_id(os.path.basename(pred_file))
+                    if 'rat_id' in df.columns:
+                        df['rat_id'] = corrected_id
+                    else:
+                        df.insert(0, 'rat_id', corrected_id)
+
+                    frames.append(df)
+                except Exception as e:
+                    print(f"Error reading {pred_file}: {e}")
+
+            if not frames:
+                QMessageBox.warning(self, "No Data", "No prediction files could be read.")
+                return
+
+            combined = pd.concat(frames, ignore_index=True)
+
+            # Save to reports folder
+            reports_folder = os.path.join(project_path, "reports")
+            os.makedirs(reports_folder, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            project_name = project_config.get("project_name", "HTR_Analysis")
+
+            active_run_path = self._get_active_predictions_path()
+            run_name = ""
+            if active_run_path:
+                rn = os.path.basename(active_run_path)
+                if rn != "predictions":
+                    run_name = f"_{rn}"
+
+            csv_filename = f"{project_name}{run_name}_combined_{timestamp}.csv"
+            csv_path = os.path.join(reports_folder, csv_filename)
+
+            combined.to_csv(csv_path, index=False)
+
+            # Count repaired IDs
+            unique_ids = combined['rat_id'].nunique()
+            total_rows = len(combined)
+            htr_count = len(combined[combined['prediction'] == 1]) if 'prediction' in combined.columns else 0
+
+            self.show_progress(f"Combined {len(frames)} files into: {csv_filename}")
+
+            QMessageBox.information(
+                self,
+                "Combined Successfully",
+                f"All prediction files combined!\n\n"
+                f"File: {csv_filename}\n"
+                f"Location: {reports_folder}\n\n"
+                f"Files combined: {len(frames)}\n"
+                f"Total rows: {total_rows}\n"
+                f"Total HTR events: {htr_count}\n"
+                f"Unique Rat IDs (repaired): {unique_ids}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Combine Failed",
+                f"Could not combine prediction files:\n{str(e)}"
             )
 
     def show_htr_detail(self, pred_file_path, filename):

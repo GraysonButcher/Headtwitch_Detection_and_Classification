@@ -95,7 +95,8 @@ class HTRClassifier:
             base_model = XGBClassifier(
                 random_state=random_state,
                 eval_metric='logloss',
-                scale_pos_weight=scale_pos_weight
+                scale_pos_weight=scale_pos_weight,
+                importance_type='gain'
             )
             
             param_grid = {
@@ -139,7 +140,8 @@ class HTRClassifier:
             model = XGBClassifier(
                 random_state=random_state,
                 eval_metric='logloss',
-                scale_pos_weight=scale_pos_weight
+                scale_pos_weight=scale_pos_weight,
+                importance_type='gain'
             )
         else:
             model = RandomForestClassifier(random_state=random_state)
@@ -370,21 +372,30 @@ class BatchPredictor:
         return results
     
     def _parse_filename(self, filepath: str) -> Dict[str, str]:
-        """Parse metadata from filename."""
+        """Parse metadata from filename.
+
+        Expects filenames like: Cohort_1_DOI_1mgkg_6011f_htr_features.csv
+        Rat ID is the last underscore-separated segment that looks like 3+ digits
+        optionally followed by a single letter (e.g., 6011f, 6010, 1001a).
+        """
         import re
 
         filename = os.path.basename(filepath)
 
         try:
             # Remove common file extensions and suffixes
-            base_name = filename.replace('.csv', '').replace('.h5', '').replace('_htr_features', '').replace('_predicted', '')
+            base_name = filename.replace('.csv', '').replace('.h5', '')
+            for suffix in ['_htr_features_predicted', '_predictions', '_htr_features', '_predicted']:
+                base_name = base_name.replace(suffix, '')
 
-            # Extract rat ID as the first sequence of digits in the filename
-            rat_id_match = re.search(r'(\d+)', base_name)
-            if rat_id_match:
-                rat_id = rat_id_match.group(1)
-            else:
-                rat_id = 'unknown'
+            # Split by underscores, search from end for rat ID pattern
+            # Rat IDs: 3+ digits optionally followed by a single letter (e.g., 6011f)
+            parts = base_name.split('_')
+            rat_id = 'unknown'
+            for part in reversed(parts):
+                if re.match(r'^\d{3,}[a-zA-Z]?$', part):
+                    rat_id = part
+                    break
 
             # Don't try to parse dose - just set to unknown
             dose = 'unknown'

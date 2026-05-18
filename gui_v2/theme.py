@@ -240,8 +240,8 @@ def get_app_stylesheet():
         QGroupBox {{
             border: 1px solid {Colors.BORDER};
             border-radius: 6px;
-            margin-top: 12px;
-            padding-top: 14px;
+            margin-top: 14px;
+            padding: 22px 8px 8px 8px;
             font-family: "{Fonts.FAMILY}";
             font-size: {Fonts.SIZE_BODY}pt;
             font-weight: bold;

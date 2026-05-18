@@ -1300,6 +1300,11 @@ class HTRAnalysisAppV3(QMainWindow):
                 shap_values_for_log = sorted(
                     zip(X_val.columns, mean_abs_shap), key=lambda x: x[1], reverse=True
                 )
+                # Save raw per-sample SHAP values so the beeswarm can be recreated
+                shap_csv_path = os.path.join(analysis_folder, f"shap_values_{timestamp}.csv")
+                shap_df = pd.DataFrame(shap_vals.values, columns=X_val.columns)
+                shap_df.insert(0, 'sample_index', X_val.index)
+                shap_df.to_csv(shap_csv_path, index=False)
                 plt.close(fig_shap)
                 self.show_training_progress(f"SHAP summary saved: {os.path.basename(shap_plot_path)}")
             except ImportError:
@@ -1320,6 +1325,14 @@ class HTRAnalysisAppV3(QMainWindow):
                 f1_arr = np.where((prec[:-1] + rec[:-1]) > 0,
                                   2 * (prec[:-1] * rec[:-1]) / (prec[:-1] + rec[:-1]), 0.0)
                 optimal_threshold = float(thresholds[np.argmax(f1_arr)])
+                # Save raw threshold curve data so it can be recreated in other programs
+                tc_csv_path = os.path.join(analysis_folder, f"threshold_curve_data_{timestamp}.csv")
+                pd.DataFrame({
+                    'threshold': thresholds,
+                    'precision': prec[:-1],
+                    'recall': rec[:-1],
+                    'f1': f1_arr,
+                }).to_csv(tc_csv_path, index=False)
                 plt.close(fig_tc)
                 self.show_training_progress(f"Threshold curve saved (optimal threshold: {optimal_threshold:.3f})")
             except Exception as e:
@@ -1347,7 +1360,7 @@ class HTRAnalysisAppV3(QMainWindow):
                     val_results = training_details.get('validation_results', {})
                     report = val_results.get('classification_report', {})
                     if report:
-                        f.write("--- Classification Report ---\n")
+                        f.write("--- Classification Report (20% held-out validation set) ---\n")
                         # Header
                         f.write(f"{'':>18} {'precision':>10} {'recall':>10} {'f1-score':>10} {'support':>10}\n\n")
                         for label, metrics in report.items():
@@ -1363,8 +1376,8 @@ class HTRAnalysisAppV3(QMainWindow):
                     # Confusion matrix
                     cm = val_results.get('confusion_matrix', None)
                     if cm:
-                        f.write("--- Confusion Matrix ---\n")
-                        f.write("  (rows = actual, cols = predicted)\n")
+                        f.write("--- Confusion Matrix (20% held-out validation set) ---\n")
+                        f.write("  (rows = actual, cols = predicted; 0 = no HTR, 1 = HTR)\n")
                         for row in cm:
                             f.write("  " + "  ".join(f"{v:>6}" for v in row) + "\n")
                         f.write("\n")
@@ -1372,7 +1385,9 @@ class HTRAnalysisAppV3(QMainWindow):
                     # All feature importances
                     try:
                         imp_df = classifier.get_feature_importance()
-                        f.write("--- All Feature Importances ---\n")
+                        f.write("--- All Feature Importances (XGBoost gain, normalized to sum=1) ---\n")
+                        f.write("  Gain = average reduction in loss from splits using each feature.\n")
+                        f.write("  Values are normalized so all features sum to 1.\n\n")
                         for _, row in imp_df.iterrows():
                             f.write(f"  {row['feature']:<40} {row['importance']:.6f}\n")
                         f.write("\n")
@@ -1381,7 +1396,10 @@ class HTRAnalysisAppV3(QMainWindow):
 
                     # SHAP feature importances
                     if shap_values_for_log:
-                        f.write("--- SHAP Feature Importances (mean |SHAP|) ---\n")
+                        f.write("--- SHAP Feature Importances (mean |SHAP|, TreeSHAP, log-odds) ---\n")
+                        f.write("  TreeSHAP: exact Shapley values computed via shap.TreeExplainer.\n")
+                        f.write("  Values are in log-odds units (raw XGBoost output before sigmoid).\n")
+                        f.write("  Mean |SHAP| = average absolute contribution across validation samples.\n\n")
                         for feat_name, shap_val in shap_values_for_log:
                             f.write(f"  {feat_name:<40} {shap_val:.6f}\n")
                         f.write("\n")
@@ -1389,7 +1407,24 @@ class HTRAnalysisAppV3(QMainWindow):
                     # Optimal threshold
                     if optimal_threshold is not None:
                         f.write(f"--- Optimal Classification Threshold ---\n")
-                        f.write(f"  {optimal_threshold:.4f}  (maximizes F1 score)\n\n")
+                        f.write(f"  Applied to predicted probability of HTR (positive class).\n")
+                        f.write(f"  Selected as the threshold maximizing F1 score on the validation set.\n\n")
+                        f.write(f"  {optimal_threshold:.4f}\n\n")
+
+                    # Saved output files
+                    f.write("--- Saved Output Files ---\n")
+                    f.write(f"  training_log_*.txt          This file.\n")
+                    f.write(f"  confusion_matrix_*.png      Confusion matrix plot (validation set).\n")
+                    f.write(f"  feature_importance_*.png    XGBoost gain feature importance bar chart.\n")
+                    f.write(f"  shap_summary_*.png          SHAP beeswarm plot (TreeSHAP, log-odds).\n")
+                    f.write(f"  threshold_curve_*.png       Precision/Recall/F1 vs. threshold plot.\n")
+                    f.write(f"  shap_values_*.csv           Per-sample TreeSHAP values (log-odds);\n")
+                    f.write(f"                              columns = features + sample_index.\n")
+                    f.write(f"  threshold_curve_data_*.csv  threshold, precision, recall, f1 arrays\n")
+                    f.write(f"                              used to draw the threshold curve plot.\n")
+                    f.write(f"  misclassified_events_*.csv  Validation samples predicted incorrectly,\n")
+                    f.write(f"                              with predicted_label and error_type columns.\n")
+                    f.write("\n")
 
                     f.write("=" * 70 + "\n")
                 self.show_training_progress(f"Training log saved: {os.path.basename(log_path)}")
